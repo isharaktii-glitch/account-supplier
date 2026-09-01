@@ -1,0 +1,67 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  ADMIN
+  WORKER
+  BUYER
+}
+
+enum Status {
+  PENDING
+  DONE
+  REJECTED
+}
+
+enum PaymentStatus {
+  PENDING
+  BUYER_PAID
+  COMPLETED
+}
+
+model User {
+  id              String         @id @default(uuid())
+  fullName        String
+  username        String         @unique
+  password        String
+  role            Role
+  userCode        String         @unique
+  referralCode    String         @unique
+  referredById    String?
+  ratePerTask     Float          @default(1.0)
+  refCommission   Float          @default(0.1)
+  balance         Float          @default(0.0)
+  createdAt       DateTime       @default(now())
+
+  accountsSubmitted AccountItem[]
+  paymentRequests   PaymentRequest[]
+}
+
+model AccountItem {
+  id           String    @id @default(uuid())
+  type         String    @default("GMAIL") // GMAIL or KYC
+  username     String
+  password     String
+  status       Status    @default(PENDING)
+  rejectReason String?
+  price        Float     @default(0.0)
+  workerId     String
+  worker       User      @relation(fields: [workerId], references: [id])
+  createdAt    DateTime  @default(now())
+}
+
+model PaymentRequest {
+  id           String        @id @default(uuid())
+  amount       Float
+  status       PaymentStatus @default(PENDING)
+  buyerSlipUrl String?
+  workerId     String
+  worker       User          @relation(fields: [workerId], references: [id])
+  createdAt    DateTime      @default(now())
+}
