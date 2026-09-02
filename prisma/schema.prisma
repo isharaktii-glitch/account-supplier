@@ -38,6 +38,9 @@ model User {
   // Buyer-specific fields
   isApproved  Boolean  @default(false)
 
+  // Payment receiving details (Worker: where Admin pays them / Admin: where Buyers pay them)
+  paymentDetails String? @db.Text
+
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -64,10 +67,11 @@ model AccountItem {
 }
 
 model PaymentRequest {
-  id             String        @id @default(cuid())
-  amount         Float
-  proofSlipUrl   String
-  status         PaymentStatus @default(PENDING)
+  id                  String        @id @default(cuid())
+  amount              Float
+  proofSlipUrl        String
+  buyerPaymentDetails String?       @db.Text
+  status              PaymentStatus @default(PENDING)
 
   buyer          User          @relation("BuyerPayments", fields: [buyerId], references: [id])
   buyerId        String
