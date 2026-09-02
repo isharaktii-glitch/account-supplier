@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
 import { Role, AccountStatus } from "@prisma/client";
+import { sanitizeString } from "@/lib/validation";
 import { revalidatePath } from "next/cache";
 import { writeFile, mkdir } from "fs/promises";
 import path from "path";
@@ -33,14 +34,30 @@ export async function getBuyerPaymentHistory() {
   });
 }
 
+export async function getAdminReceivingDetails() {
+  await requireApprovedBuyer();
+
+  const admin = await prisma.user.findFirst({
+    where: { role: Role.ADMIN },
+    select: { paymentDetails: true }
+  });
+
+  return admin?.paymentDetails ?? null;
+}
+
 export async function submitPaymentProof(formData: FormData) {
   const buyer = await requireApprovedBuyer();
 
   const amount = parseFloat(String(formData.get("amount") || "0"));
+  const buyerPaymentDetails = sanitizeString(String(formData.get("buyerPaymentDetails") || ""), 500);
   const file = formData.get("proofSlip") as File | null;
 
   if (isNaN(amount) || amount <= 0) {
     return { success: false, message: "Please enter a valid amount." };
+  }
+
+  if (!buyerPaymentDetails) {
+    return { success: false, message: "Please enter the Bank/Binance details you paid from." };
   }
 
   if (!file || file.size === 0) {
@@ -70,11 +87,13 @@ export async function submitPaymentProof(formData: FormData) {
     data: {
       amount,
       proofSlipUrl: `/uploads/${fileName}`,
+      buyerPaymentDetails,
       buyerId: buyer.id
     }
   });
 
   revalidatePath("/dashboard/buyer");
+  revalidatePath("/dashboard/admin");
 
   return { success: true, message: "Payment proof submitted. Waiting for admin approval." };
 }
