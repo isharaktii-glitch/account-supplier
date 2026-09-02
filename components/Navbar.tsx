@@ -2,6 +2,7 @@ import Link from "next/link";
 import { getSession } from "@/lib/session";
 import { logoutUser } from "@/app/actions/authActions";
 import { Role } from "@prisma/client";
+import LogoutButton from "@/components/LogoutButton";
 
 export default async function Navbar() {
   const user = await getSession();
@@ -42,11 +43,7 @@ export default async function Navbar() {
               <Link href={dashboardLink} className="btn-secondary !px-4 !py-2 text-sm">
                 Dashboard
               </Link>
-              <form action={logoutUser}>
-                <button type="submit" className="btn-primary !px-4 !py-2 text-sm">
-                  Logout
-                </button>
-              </form>
+              <LogoutButton />
             </>
           )}
         </div>
