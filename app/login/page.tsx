@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { loginUser } from "@/app/actions/authActions";
 import Link from "next/link";
 
@@ -8,6 +9,7 @@ export default function LoginPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [isError, setIsError] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const router = useRouter();
 
   async function handleSubmit(formData: FormData) {
     setMessage(null);
@@ -16,6 +18,11 @@ export default function LoginPage() {
       if (result) {
         setIsError(!result.success);
         setMessage(result.message);
+
+        if (result.success && result.redirectTo) {
+          router.push(result.redirectTo);
+          router.refresh();
+        }
       }
     });
   }
