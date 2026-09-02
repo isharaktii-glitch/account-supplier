@@ -1,0 +1,87 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  WORKER
+  BUYER
+}
+
+enum AccountStatus {
+  AVAILABLE
+  SOLD
+}
+
+enum PaymentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model User {
+  id          String   @id @default(cuid())
+  email       String   @unique
+  password    String
+  name        String
+  role        Role
+
+  // Worker-specific fields
+  workerCode  String?  @unique
+  balance     Float    @default(0)
+
+  // Buyer-specific fields
+  isApproved  Boolean  @default(false)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  accountItems    AccountItem[]   @relation("WorkerAccounts")
+  paymentRequests PaymentRequest[] @relation("BuyerPayments")
+
+  @@index([role])
+}
+
+model AccountItem {
+  id          String        @id @default(cuid())
+  gmail       String
+  password    String
+  status      AccountStatus @default(AVAILABLE)
+  rateAtEntry Float         @default(0)
+
+  worker      User          @relation("WorkerAccounts", fields: [workerId], references: [id])
+  workerId    String
+
+  createdAt   DateTime      @default(now())
+
+  @@index([workerId])
+  @@index([status])
+}
+
+model PaymentRequest {
+  id             String        @id @default(cuid())
+  amount         Float
+  proofSlipUrl   String
+  status         PaymentStatus @default(PENDING)
+
+  buyer          User          @relation("BuyerPayments", fields: [buyerId], references: [id])
+  buyerId        String
+
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@index([buyerId])
+  @@index([status])
+}
+
+model SystemSettings {
+  id                  String @id @default("global")
+  taskRate            Float  @default(50)
+  referralCommission  Float  @default(10)
+  updatedAt           DateTime @updatedAt
+}
