@@ -21,10 +21,12 @@ type PaymentRequest = {
 
 export default function BuyerPanelClient({
   initialAccounts,
-  initialPayments
+  initialPayments,
+  adminPaymentDetails
 }: {
   initialAccounts: AccountItem[];
   initialPayments: PaymentRequest[];
+  adminPaymentDetails: string | null;
 }) {
   const [accounts] = useState(initialAccounts);
   const [payments, setPayments] = useState(initialPayments);
@@ -79,7 +81,7 @@ export default function BuyerPanelClient({
       {activeTab === "accounts" && (
         <div>
           <h2 className="mb-4 text-lg font-semibold text-white">
-            Available Accounts ({accounts.length})
+            Available Gmail Accounts ({accounts.length})
           </h2>
           {accounts.length === 0 ? (
             <p className="glass-panel p-6 text-sm text-slate-400">
@@ -112,7 +114,23 @@ export default function BuyerPanelClient({
 
       {activeTab === "payments" && (
         <div className="grid gap-6 lg:grid-cols-3">
-          <div className="lg:col-span-1">
+          <div className="lg:col-span-1 space-y-6">
+            <div className="glass-panel border-galaxy-accent2/30 p-6">
+              <h2 className="mb-1 text-lg font-semibold text-white">Send Payment To</h2>
+              <p className="mb-3 text-xs text-slate-400">
+                Use the details below to make your payment before submitting proof.
+              </p>
+              <div className="rounded-lg border border-galaxy-accent2/30 bg-galaxy-accent2/10 p-3">
+                <p className="whitespace-pre-wrap text-sm font-medium text-galaxy-accent2">
+                  {adminPaymentDetails || (
+                    <span className="italic text-slate-500">
+                      Admin has not set up payment details yet. Please contact support.
+                    </span>
+                  )}
+                </p>
+              </div>
+            </div>
+
             <div className="glass-panel p-6">
               <h2 className="mb-4 text-lg font-semibold text-white">Submit Payment Proof</h2>
               <form ref={formRef} action={handleSubmit} className="space-y-4">
@@ -130,6 +148,20 @@ export default function BuyerPanelClient({
                     placeholder="0.00"
                   />
                 </div>
+
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-slate-300">
+                    Your Bank / Binance Details (Paid From)
+                  </label>
+                  <textarea
+                    name="buyerPaymentDetails"
+                    required
+                    rows={3}
+                    className="glass-input resize-none"
+                    placeholder={"Bank: BOC\nAcc Name: Jane Smith\n\nOR\n\nBinance ID: 112233445"}
+                  />
+                </div>
+
                 <div>
                   <label className="mb-1.5 block text-sm font-medium text-slate-300">
                     Proof Slip (Image or PDF)
