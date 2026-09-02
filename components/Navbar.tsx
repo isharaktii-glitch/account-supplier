@@ -9,7 +9,7 @@ export default function Navbar() {
         <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-500 via-blue-600 to-indigo-600 flex items-center justify-center shadow-[0_0_15px_rgba(0,240,255,0.5)] transform -rotate-6">
           <span className="text-xl font-black text-white">G</span>
         </div>
-        <span className="text-xl font-extrabold bg-gradient-to-r from-cyan-400 via-blue-300 to-indigo-400 bg-clip-text text-transparent drop-shadow-[0_2px_10px_rgba(0,240,255,0.3)]">
+        <span className="text-xl font-extrabold bg-gradient-to-r from-cyan-400 via-blue-300 to-indigo-400 bg-clip-text text-transparent">
           GALAXY WORKERS
         </span>
       </div>
@@ -17,9 +17,7 @@ export default function Navbar() {
       <div className="flex space-x-6 text-sm font-medium text-slate-300">
         <Link href="/" className="hover:text-cyan-400 transition-all">Home</Link>
         <Link href="/guidelines" className="hover:text-cyan-400 transition-all">Guidelines</Link>
-        <Link href="/dashboard/worker" className="hover:text-cyan-400 transition-all">Worker</Link>
-        <Link href="/dashboard/buyer" className="hover:text-cyan-400 transition-all">Buyer</Link>
-        <Link href="/dashboard/admin" className="hover:text-cyan-400 transition-all">Admin</Link>
+        <Link href="/login" className="px-4 py-1.5 rounded-xl bg-cyan-500/10 border border-cyan-500/40 text-cyan-300 hover:bg-cyan-500 hover:text-black transition-all">Portal Access</Link>
       </div>
     </nav>
   );
