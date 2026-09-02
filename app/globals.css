@@ -1,0 +1,79 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-galaxy-bg text-slate-100 antialiased;
+    background-image: radial-gradient(circle at 20% 20%, rgba(124,58,237,0.25), transparent 40%),
+      radial-gradient(circle at 80% 0%, rgba(34,211,238,0.18), transparent 45%),
+      radial-gradient(circle at 50% 100%, rgba(168,85,247,0.15), transparent 50%);
+    background-attachment: fixed;
+    background-color: #05050a;
+  }
+}
+
+@layer components {
+  .glass-panel {
+    @apply relative rounded-2xl border border-white/10 bg-white/5 backdrop-blur-glass shadow-glass;
+  }
+
+  .glass-card {
+    @apply glass-panel p-6 transition-transform duration-300 hover:-translate-y-1 hover:shadow-glow-purple;
+  }
+
+  .glass-input {
+    @apply w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-slate-100 placeholder-slate-400 outline-none backdrop-blur-glass transition focus:border-galaxy-accent focus:shadow-glow-purple;
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center justify-center rounded-xl bg-gradient-to-r from-galaxy-accent to-galaxy-glow px-6 py-3 font-semibold text-white shadow-glow-purple transition hover:scale-[1.02] hover:shadow-glow-cyan active:scale-95;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center rounded-xl border border-white/15 bg-white/5 px-6 py-3 font-semibold text-slate-100 backdrop-blur-glass transition hover:border-galaxy-accent2 hover:text-galaxy-accent2;
+  }
+
+  .badge {
+    @apply inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold;
+  }
+
+  .badge-pending {
+    @apply badge bg-amber-500/15 text-amber-300 border border-amber-400/30;
+  }
+
+  .badge-approved {
+    @apply badge bg-emerald-500/15 text-emerald-300 border border-emerald-400/30;
+  }
+
+  .badge-rejected {
+    @apply badge bg-rose-500/15 text-rose-300 border border-rose-400/30;
+  }
+
+  .table-glass {
+    @apply w-full border-separate border-spacing-y-2;
+  }
+
+  .table-glass th {
+    @apply px-4 py-2 text-left text-xs uppercase tracking-wider text-slate-400;
+  }
+
+  .table-glass td {
+    @apply glass-panel px-4 py-3 text-sm;
+  }
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(124, 58, 237, 0.5);
+  border-radius: 999px;
+}
