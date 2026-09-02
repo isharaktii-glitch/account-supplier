@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
 import { Role, PaymentStatus, AccountStatus } from "@prisma/client";
+import { sanitizeString } from "@/lib/validation";
 import { revalidatePath } from "next/cache";
 
 async function requireAdmin() {
@@ -56,6 +57,26 @@ export async function updateSystemRates(formData: FormData) {
   return { success: true, message: "Rates updated successfully." };
 }
 
+export async function updateAdminPaymentDetails(formData: FormData) {
+  const admin = await requireAdmin();
+
+  const paymentDetails = sanitizeString(String(formData.get("paymentDetails") || ""), 500);
+
+  if (!paymentDetails) {
+    return { success: false, message: "Please enter your Bank or Binance receiving details." };
+  }
+
+  await prisma.user.update({
+    where: { id: admin.id },
+    data: { paymentDetails }
+  });
+
+  revalidatePath("/dashboard/admin");
+  revalidatePath("/dashboard/buyer");
+
+  return { success: true, message: "Your payment receiving details were updated." };
+}
+
 export async function approvePaymentRequest(requestId: string) {
   await requireAdmin();
 
@@ -101,31 +122,10 @@ export async function markAccountAsSold(accountId: string) {
 }
 
 export async function getAdminDashboardData() {
-  await requireAdmin();
+  const admin = await requireAdmin();
 
-  const [pendingBuyers, approvedBuyers, workers, pendingPayments, allPayments, settings, accountStats] =
-    await Promise.all([
-      prisma.user.findMany({ where: { role: Role.BUYER, isApproved: false }, orderBy: { createdAt: "desc" } }),
-      prisma.user.findMany({ where: { role: Role.BUYER, isApproved: true }, orderBy: { createdAt: "desc" } }),
-      prisma.user.findMany({ where: { role: Role.WORKER }, orderBy: { createdAt: "desc" } }),
-      prisma.paymentRequest.findMany({
-        where: { status: PaymentStatus.PENDING },
-        include: { buyer: true },
-        orderBy: { createdAt: "desc" }
-      }),
-      prisma.paymentRequest.findMany({
-        include: { buyer: true },
-        orderBy: { createdAt: "desc" },
-        take: 20
-      }),
-      prisma.systemSettings.findUnique({ where: { id: "global" } }),
-      prisma.accountItem.groupBy({
-        by: ["status"],
-        _count: { status: true }
-      })
-    ]);
-
-  return {
+  const [
+    freshAdmin,
     pendingBuyers,
     approvedBuyers,
     workers,
@@ -133,5 +133,38 @@ export async function getAdminDashboardData() {
     allPayments,
     settings,
     accountStats
+  ] = await Promise.all([
+    prisma.user.findUnique({ where: { id: admin.id } }),
+    prisma.user.findMany({ where: { role: Role.BUYER, isApproved: false }, orderBy: { createdAt: "desc" } }),
+    prisma.user.findMany({ where: { role: Role.BUYER, isApproved: true }, orderBy: { createdAt: "desc" } }),
+    prisma.user.findMany({ where: { role: Role.WORKER }, orderBy: { createdAt: "desc" } }),
+    prisma.paymentRequest.findMany({
+      where: { status: PaymentStatus.PENDING },
+      include: { buyer: true },
+      orderBy: { createdAt: "desc" }
+    }),
+    prisma.paymentRequest.findMany({
+      include: { buyer: true },
+      orderBy: { createdAt: "desc" },
+      take: 20
+    }),
+    prisma.systemSettings.findUnique({ where: { id: "global" } }),
+    prisma.accountItem.groupBy({
+      by: ["status"],
+      _count: { status: true }
+    })
+  ]);
+
+  return {
+    admin: freshAdmin,
+    pendingBuyers,
+    approvedBuyers,
+    workers,
+    pendingPayments,
+    allPayments,
+    settings,
+    accountStats,
+    pendingPaymentCount: pendingPayments.length,
+    pendingBuyerCount: pendingBuyers.length
   };
 }
