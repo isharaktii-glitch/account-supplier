@@ -47,6 +47,25 @@ export async function submitGmailAccount(formData: FormData) {
   return { success: true, message: `Account submitted! ${currentRate} added to your balance.` };
 }
 
+export async function updateWorkerPaymentDetails(formData: FormData) {
+  const worker = await requireWorker();
+
+  const paymentDetails = sanitizeString(String(formData.get("paymentDetails") || ""), 500);
+
+  if (!paymentDetails) {
+    return { success: false, message: "Please enter your Bank or Binance payment details." };
+  }
+
+  await prisma.user.update({
+    where: { id: worker.id },
+    data: { paymentDetails }
+  });
+
+  revalidatePath("/dashboard/worker");
+
+  return { success: true, message: "Payment details saved successfully." };
+}
+
 export async function getWorkerDashboardData() {
   const worker = await requireWorker();
 
