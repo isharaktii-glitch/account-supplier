@@ -9,11 +9,11 @@ generator client {
 
 enum Role {
   ADMIN
-  WORKER
   BUYER
+  WORKER
 }
 
-enum Status {
+enum AccountStatus {
   PENDING
   DONE
   REJECTED
@@ -26,42 +26,41 @@ enum PaymentStatus {
 }
 
 model User {
-  id              String         @id @default(uuid())
+  id              String           @id @default(uuid())
+  userCode        String           @unique
   fullName        String
-  username        String         @unique
+  username        String           @unique
   password        String
-  role            Role
-  userCode        String         @unique
-  referralCode    String         @unique
+  role            Role             @default(WORKER")
+  ratePerTask     Float            @default(1.00)
+  refCommission   Float            @default(0.10)
+  balance         Float            @default(0.00)
   referredById    String?
-  ratePerTask     Float          @default(1.0)
-  refCommission   Float          @default(0.1)
-  balance         Float          @default(0.0)
-  createdAt       DateTime       @default(now())
-
   accountsSubmitted AccountItem[]
-  paymentRequests   PaymentRequest[]
+  paymentRequests PaymentRequest[]
+  createdAt       DateTime         @default(now())
 }
 
 model AccountItem {
-  id           String    @id @default(uuid())
-  type         String    @default("GMAIL") // GMAIL or KYC
+  id           String        @id @default(uuid())
+  type         String        @default("GMAIL")
   username     String
   password     String
-  status       Status    @default(PENDING)
+  price        Float         @default(1.00)
+  status       AccountStatus @default(PENDING)
   rejectReason String?
-  price        Float     @default(0.0)
-  workerId     String
-  worker       User      @relation(fields: [workerId], references: [id])
-  createdAt    DateTime  @default(now())
-}
-
-model PaymentRequest {
-  id           String        @id @default(uuid())
-  amount       Float
-  status       PaymentStatus @default(PENDING)
-  buyerSlipUrl String?
   workerId     String
   worker       User          @relation(fields: [workerId], references: [id])
   createdAt    DateTime      @default(now())
 }
+
+model PaymentRequest {
+  id           String        @id @default(uuid())
+  workerId     String
+  worker       User          @relation(fields: [workerId], references: [id])
+  amount       Float
+  buyerSlipUrl String?
+  status       PaymentStatus @default(PENDING)
+  createdAt    DateTime      @default(now())
+}
+
