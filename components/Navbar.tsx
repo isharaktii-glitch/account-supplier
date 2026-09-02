@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { getSession } from "@/lib/session";
-import { logoutUser } from "@/app/actions/authActions";
 import { Role } from "@prisma/client";
 import LogoutButton from "@/components/LogoutButton";
 
