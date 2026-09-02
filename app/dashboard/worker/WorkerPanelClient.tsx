@@ -1,13 +1,14 @@
 "use client";
 
 import { useState, useTransition, useRef } from "react";
-import { submitGmailAccount } from "@/app/actions/workerActions";
+import { submitGmailAccount, updateWorkerPaymentDetails } from "@/app/actions/workerActions";
 
 type Worker = {
   id: string;
   name: string;
   balance: number;
   workerCode: string | null;
+  paymentDetails: string | null;
 } | null;
 
 type Submission = {
@@ -34,6 +35,10 @@ export default function WorkerPanelClient({
   const [isPending, startTransition] = useTransition();
   const formRef = useRef<HTMLFormElement>(null);
 
+  const [paymentMessage, setPaymentMessage] = useState<string | null>(null);
+  const [paymentIsError, setPaymentIsError] = useState(false);
+  const [isPaymentPending, startPaymentTransition] = useTransition();
+
   function handleSubmit(formData: FormData) {
     setMessage(null);
     startTransition(async () => {
@@ -55,6 +60,22 @@ export default function WorkerPanelClient({
             },
             ...prev
           ]);
+        }
+      }
+    });
+  }
+
+  function handlePaymentDetailsSubmit(formData: FormData) {
+    setPaymentMessage(null);
+    startPaymentTransition(async () => {
+      const result = await updateWorkerPaymentDetails(formData);
+      if (result) {
+        setPaymentIsError(!result.success);
+        setPaymentMessage(result.message);
+        if (result.success) {
+          setWorker((prev) =>
+            prev ? { ...prev, paymentDetails: String(formData.get("paymentDetails")) } : prev
+          );
         }
       }
     });
@@ -120,6 +141,42 @@ export default function WorkerPanelClient({
 
             <button type="submit" disabled={isPending} className="btn-primary w-full">
               {isPending ? "Submitting..." : "Submit Account"}
+            </button>
+          </form>
+        </div>
+
+        <div className="glass-panel p-6">
+          <h2 className="mb-1 text-lg font-semibold text-white">Your Payment Details</h2>
+          <p className="mb-4 text-xs text-slate-400">
+            Enter your Bank Account or Binance ID. This is only visible to the Admin, who uses it
+            to pay your earnings.
+          </p>
+          <form action={handlePaymentDetailsSubmit} className="space-y-4">
+            <div>
+              <textarea
+                name="paymentDetails"
+                required
+                rows={4}
+                defaultValue={worker?.paymentDetails ?? ""}
+                className="glass-input resize-none"
+                placeholder={"Bank: Sampath Bank\nAcc No: 001234567890\nName: John Doe\n\nOR\n\nBinance ID: 123456789"}
+              />
+            </div>
+
+            {paymentMessage && (
+              <div
+                className={`rounded-xl border px-4 py-3 text-sm ${
+                  paymentIsError
+                    ? "border-rose-400/30 bg-rose-500/10 text-rose-300"
+                    : "border-emerald-400/30 bg-emerald-500/10 text-emerald-300"
+                }`}
+              >
+                {paymentMessage}
+              </div>
+            )}
+
+            <button type="submit" disabled={isPaymentPending} className="btn-secondary w-full">
+              {isPaymentPending ? "Saving..." : "Save Payment Details"}
             </button>
           </form>
         </div>
