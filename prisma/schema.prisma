@@ -29,9 +29,10 @@ model User {
   id              String           @id @default(uuid())
   userCode        String           @unique
   fullName        String
-  username        String           @unique
+  username        String           @unique // Email for Auth
   password        String
   role            Role             @default(WORKER)
+  isApproved      Boolean          @default(true) // False for Buyers initially
   ratePerTask     Float            @default(1.00)
   refCommission   Float            @default(0.10)
   balance         Float            @default(0.00)
@@ -63,3 +64,4 @@ model PaymentRequest {
   status       PaymentStatus @default(PENDING)
   createdAt    DateTime      @default(now())
 }
+
