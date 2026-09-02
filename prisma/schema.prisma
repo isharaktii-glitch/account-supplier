@@ -31,7 +31,7 @@ model User {
   fullName        String
   username        String           @unique
   password        String
-  role            Role             @default(WORKER")
+  role            Role             @default(WORKER)
   ratePerTask     Float            @default(1.00)
   refCommission   Float            @default(0.10)
   balance         Float            @default(0.00)
@@ -63,4 +63,3 @@ model PaymentRequest {
   status       PaymentStatus @default(PENDING)
   createdAt    DateTime      @default(now())
 }
-
