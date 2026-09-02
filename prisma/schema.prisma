@@ -16,12 +16,20 @@ enum Role {
 enum AccountStatus {
   AVAILABLE
   SOLD
+  REJECTED
 }
 
 enum PaymentStatus {
   PENDING
   APPROVED
   REJECTED
+}
+
+enum NotificationType {
+  PAYMENT_RECEIVED
+  ACCOUNT_SOLD
+  ACCOUNT_REJECTED
+  ANNOUNCEMENT
 }
 
 model User {
@@ -32,8 +40,16 @@ model User {
   role        Role
 
   // Worker-specific fields
-  workerCode  String?  @unique
+  workerCode  String?  @unique   // legacy simple code (kept for backward compatibility)
+  displayId   String?  @unique   // e.g. "HH-001" or "HH-001/PS"
+  initials    String?            // e.g. "HH"
   balance     Float    @default(0)
+
+  // Referral system
+  referralCode String?  @unique  // short shareable code used in the referral link
+  referredById String?
+  referredBy   User?    @relation("ReferralChain", fields: [referredById], references: [id])
+  referrals    User[]   @relation("ReferralChain")
 
   // Buyer-specific fields
   isApproved  Boolean  @default(false)
@@ -44,18 +60,22 @@ model User {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  accountItems    AccountItem[]   @relation("WorkerAccounts")
-  paymentRequests PaymentRequest[] @relation("BuyerPayments")
+  accountItems      AccountItem[]     @relation("WorkerAccounts")
+  paymentRequests   PaymentRequest[]  @relation("BuyerPayments")
+  notifications     Notification[]    @relation("UserNotifications")
+  payoutProofs      PayoutProof[]     @relation("WorkerPayoutProofs")
 
   @@index([role])
+  @@index([referredById])
 }
 
 model AccountItem {
-  id          String        @id @default(cuid())
-  gmail       String
-  password    String
-  status      AccountStatus @default(AVAILABLE)
-  rateAtEntry Float         @default(0)
+  id             String        @id @default(cuid())
+  gmail          String
+  password       String
+  status         AccountStatus @default(AVAILABLE)
+  rateAtEntry    Float         @default(0)
+  rejectionReason String?      @db.Text
 
   worker      User          @relation("WorkerAccounts", fields: [workerId], references: [id])
   workerId    String
@@ -72,6 +92,7 @@ model PaymentRequest {
   proofSlipUrl        String
   buyerPaymentDetails String?       @db.Text
   status              PaymentStatus @default(PENDING)
+  rejectionReason     String?       @db.Text
 
   buyer          User          @relation("BuyerPayments", fields: [buyerId], references: [id])
   buyerId        String
@@ -83,9 +104,40 @@ model PaymentRequest {
   @@index([status])
 }
 
+model PayoutProof {
+  id          String   @id @default(cuid())
+  amount      Float
+  proofUrl    String
+  note        String?  @db.Text
+
+  worker      User     @relation("WorkerPayoutProofs", fields: [workerId], references: [id])
+  workerId    String
+
+  createdAt   DateTime @default(now())
+
+  @@index([workerId])
+}
+
+model Notification {
+  id        String            @id @default(cuid())
+  type      NotificationType
+  title     String
+  message   String            @db.Text
+  isRead    Boolean           @default(false)
+
+  user      User              @relation("UserNotifications", fields: [userId], references: [id])
+  userId    String
+
+  createdAt DateTime          @default(now())
+
+  @@index([userId])
+  @@index([isRead])
+}
+
 model SystemSettings {
   id                  String @id @default("global")
   taskRate            Float  @default(50)
   referralCommission  Float  @default(10)
+  directJoinCounter   Int    @default(0)
   updatedAt           DateTime @updatedAt
 }
