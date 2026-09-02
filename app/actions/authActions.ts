@@ -5,11 +5,11 @@ import { createSession, destroySession } from "@/lib/session";
 import { isValidEmail, isStrongEnough, sanitizeString } from "@/lib/validation";
 import { Role } from "@prisma/client";
 import bcrypt from "bcryptjs";
-import { redirect } from "next/navigation";
 
 export type AuthResult = {
   success: boolean;
   message: string;
+  redirectTo?: string;
 };
 
 async function generateWorkerCode(): Promise<string> {
@@ -24,7 +24,10 @@ export async function registerWorker(formData: FormData): Promise<AuthResult> {
   const password = String(formData.get("password") || "");
 
   if (!name || !isValidEmail(email) || !isStrongEnough(password)) {
-    return { success: false, message: "Please provide valid name, email and a password of at least 6 characters." };
+    return {
+      success: false,
+      message: "Please provide valid name, email and a password of at least 6 characters."
+    };
   }
 
   const existing = await prisma.user.findUnique({ where: { email } });
@@ -47,7 +50,8 @@ export async function registerWorker(formData: FormData): Promise<AuthResult> {
   });
 
   await createSession(user.id);
-  redirect("/dashboard/worker");
+
+  return { success: true, message: "Account created!", redirectTo: "/dashboard/worker" };
 }
 
 export async function registerBuyer(formData: FormData): Promise<AuthResult> {
@@ -56,7 +60,10 @@ export async function registerBuyer(formData: FormData): Promise<AuthResult> {
   const password = String(formData.get("password") || "");
 
   if (!name || !isValidEmail(email) || !isStrongEnough(password)) {
-    return { success: false, message: "Please provide valid name, email and a password of at least 6 characters." };
+    return {
+      success: false,
+      message: "Please provide valid name, email and a password of at least 6 characters."
+    };
   }
 
   const existing = await prisma.user.findUnique({ where: { email } });
@@ -101,21 +108,24 @@ export async function loginUser(formData: FormData): Promise<AuthResult> {
   }
 
   if (user.role === Role.BUYER && !user.isApproved) {
-    return { success: false, message: "Pending Approval. Please wait until an admin approves your account." };
+    return {
+      success: false,
+      message: "Pending Approval. Please wait until an admin approves your account."
+    };
   }
 
   await createSession(user.id);
 
-  if (user.role === Role.ADMIN) {
-    redirect("/dashboard/admin");
-  } else if (user.role === Role.WORKER) {
-    redirect("/dashboard/worker");
-  } else {
-    redirect("/dashboard/buyer");
-  }
+  const redirectTo =
+    user.role === Role.ADMIN
+      ? "/dashboard/admin"
+      : user.role === Role.WORKER
+      ? "/dashboard/worker"
+      : "/dashboard/buyer";
+
+  return { success: true, message: "Login successful!", redirectTo };
 }
 
-export async function logoutUser() {
+export async function logoutUser(): Promise<void> {
   await destroySession();
-  redirect("/login");
 }
