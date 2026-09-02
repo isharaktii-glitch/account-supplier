@@ -52,3 +52,10 @@ export async function approveWorkerPayment(paymentRequestId: string) {
 
   revalidatePath("/dashboard/admin");
 }
+export async function approveBuyerAccount(buyerId: string) {
+  await prisma.user.update({
+    where: { id: buyerId },
+    data: { isApproved: true },
+  });
+  revalidatePath("/dashboard/admin");
+}
