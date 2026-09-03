@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { createSession, destroySession } from "@/lib/session";
 import { isValidEmail, isStrongEnough, sanitizeString } from "@/lib/validation";
+import { generateReferralCode, computeNewWorkerDisplayId } from "@/lib/referral";
 import { Role } from "@prisma/client";
 import bcrypt from "bcryptjs";
 
@@ -12,16 +13,11 @@ export type AuthResult = {
   redirectTo?: string;
 };
 
-async function generateWorkerCode(): Promise<string> {
-  const count = await prisma.user.count({ where: { role: Role.WORKER } });
-  const nextNumber = count + 1;
-  return `UK-${String(nextNumber).padStart(3, "0")}`;
-}
-
 export async function registerWorker(formData: FormData): Promise<AuthResult> {
   const name = sanitizeString(String(formData.get("name") || ""));
   const email = sanitizeString(String(formData.get("email") || "")).toLowerCase();
   const password = String(formData.get("password") || "");
+  const refCode = sanitizeString(String(formData.get("ref") || ""));
 
   if (!name || !isValidEmail(email) || !isStrongEnough(password)) {
     return {
@@ -35,8 +31,14 @@ export async function registerWorker(formData: FormData): Promise<AuthResult> {
     return { success: false, message: "This email is already registered." };
   }
 
+  let referrer = null;
+  if (refCode) {
+    referrer = await prisma.user.findUnique({ where: { referralCode: refCode } });
+  }
+
   const hashedPassword = await bcrypt.hash(password, 12);
-  const workerCode = await generateWorkerCode();
+  const { displayId, initials } = await computeNewWorkerDisplayId(name, referrer?.id ?? null);
+  const ownReferralCode = generateReferralCode();
 
   const user = await prisma.user.create({
     data: {
@@ -44,7 +46,11 @@ export async function registerWorker(formData: FormData): Promise<AuthResult> {
       email,
       password: hashedPassword,
       role: Role.WORKER,
-      workerCode,
+      workerCode: displayId,
+      displayId,
+      initials,
+      referralCode: ownReferralCode,
+      referredById: referrer?.id ?? null,
       isApproved: true
     }
   });
