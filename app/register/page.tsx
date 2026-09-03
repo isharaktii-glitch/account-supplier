@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { registerWorker, registerBuyer } from "@/app/actions/authActions";
 import Link from "next/link";
 
 type Tab = "worker" | "buyer";
 
-export default function RegisterPage() {
+function RegisterForm() {
   const [tab, setTab] = useState<Tab>("worker");
   const [message, setMessage] = useState<string | null>(null);
   const [isError, setIsError] = useState(false);
@@ -147,5 +147,13 @@ export default function RegisterPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+export default function RegisterPage() {
+  return (
+    <Suspense fallback={<div className="flex min-h-screen items-center justify-center text-slate-400">Loading...</div>}>
+      <RegisterForm />
+    </Suspense>
   );
 }
