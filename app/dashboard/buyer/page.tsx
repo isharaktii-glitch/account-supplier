@@ -1,5 +1,10 @@
 import { requireRole } from "@/lib/authGuard";
-import { getAvailableAccounts, getBuyerPaymentHistory, getAdminReceivingDetails } from "@/app/actions/buyerActions";
+import {
+  getAvailableAccounts,
+  getBuyerPaymentHistory,
+  getAdminReceivingDetails,
+  getBuyerNotifications
+} from "@/app/actions/buyerActions";
 import { Role } from "@prisma/client";
 import BuyerPanelClient from "./BuyerPanelClient";
 import Navbar from "@/components/Navbar";
@@ -7,10 +12,11 @@ import Navbar from "@/components/Navbar";
 export default async function BuyerDashboardPage() {
   await requireRole(Role.BUYER);
 
-  const [accounts, payments, adminPaymentDetails] = await Promise.all([
+  const [accounts, payments, adminPaymentDetails, notificationData] = await Promise.all([
     getAvailableAccounts(),
     getBuyerPaymentHistory(),
-    getAdminReceivingDetails()
+    getAdminReceivingDetails(),
+    getBuyerNotifications()
   ]);
 
   return (
@@ -30,6 +36,8 @@ export default async function BuyerDashboardPage() {
             initialAccounts={JSON.parse(JSON.stringify(accounts))}
             initialPayments={JSON.parse(JSON.stringify(payments))}
             adminPaymentDetails={adminPaymentDetails}
+            initialNotifications={JSON.parse(JSON.stringify(notificationData.notifications))}
+            initialUnreadCount={notificationData.unreadCount}
           />
         </div>
       </div>
