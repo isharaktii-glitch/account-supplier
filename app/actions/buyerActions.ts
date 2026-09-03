@@ -2,98 +2,132 @@
 
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
-import { Role, AccountStatus } from "@prisma/client";
-import { sanitizeString } from "@/lib/validation";
+import { Role } from "@prisma/client";
+import { sanitizeString, isValidEmail } from "@/lib/validation";
 import { revalidatePath } from "next/cache";
-import { writeFile, mkdir } from "fs/promises";
-import path from "path";
 
-async function requireApprovedBuyer() {
+async function requireWorker() {
   const user = await getSession();
-  if (!user || user.role !== Role.BUYER || !user.isApproved) {
-    throw new Error("Unauthorized: Approved buyer access only.");
+  if (!user || user.role !== Role.WORKER) {
+    throw new Error("Unauthorized: Worker access only.");
   }
   return user;
 }
 
-export async function getAvailableAccounts() {
-  await requireApprovedBuyer();
+export async function submitGmailAccount(formData: FormData) {
+  const worker = await requireWorker();
 
-  return prisma.accountItem.findMany({
-    where: { status: AccountStatus.AVAILABLE },
-    orderBy: { createdAt: "desc" }
-  });
+  const gmail = sanitizeString(String(formData.get("gmail") || "")).toLowerCase();
+  const accountPassword = String(formData.get("accountPassword") || "");
+
+  if (!isValidEmail(gmail) || !accountPassword || accountPassword.length < 4) {
+    return { success: false, message: "Please provide a valid Gmail address and its password." };
+  }
+
+  const duplicate = await prisma.accountItem.findFirst({ where: { gmail } });
+  if (duplicate) {
+    return { success: false, message: "This Gmail account has already been submitted before." };
+  }
+
+  const settings = await prisma.systemSettings.findUnique({ where: { id: "global" } });
+  const currentRate = settings?.taskRate ?? 50;
+
+  await prisma.$transaction([
+    prisma.accountItem.create({
+      data: {
+        gmail,
+        password: accountPassword,
+        workerId: worker.id,
+        rateAtEntry: currentRate
+      }
+    }),
+    prisma.user.update({
+      where: { id: worker.id },
+      data: { balance: { increment: currentRate } }
+    })
+  ]);
+
+  revalidatePath("/dashboard/worker");
+
+  return { success: true, message: `Account submitted! Rs. ${currentRate} added to your balance.` };
 }
 
-export async function getBuyerPaymentHistory() {
-  const buyer = await requireApprovedBuyer();
+export async function updateWorkerPaymentDetails(formData: FormData) {
+  const worker = await requireWorker();
 
-  return prisma.paymentRequest.findMany({
-    where: { buyerId: buyer.id },
-    orderBy: { createdAt: "desc" }
+  const paymentDetails = sanitizeString(String(formData.get("paymentDetails") || ""), 500);
+
+  if (!paymentDetails) {
+    return { success: false, message: "Please enter your Bank or Binance payment details." };
+  }
+
+  await prisma.user.update({
+    where: { id: worker.id },
+    data: { paymentDetails }
   });
+
+  revalidatePath("/dashboard/worker");
+
+  return { success: true, message: "Payment details saved successfully." };
 }
 
-export async function getAdminReceivingDetails() {
-  await requireApprovedBuyer();
+export async function markNotificationAsRead(notificationId: string) {
+  const worker = await requireWorker();
 
-  const admin = await prisma.user.findFirst({
-    where: { role: Role.ADMIN },
-    select: { paymentDetails: true }
+  await prisma.notification.update({
+    where: { id: notificationId, userId: worker.id },
+    data: { isRead: true }
   });
 
-  return admin?.paymentDetails ?? null;
+  revalidatePath("/dashboard/worker");
 }
 
-export async function submitPaymentProof(formData: FormData) {
-  const buyer = await requireApprovedBuyer();
+export async function markAllNotificationsAsRead() {
+  const worker = await requireWorker();
 
-  const amount = parseFloat(String(formData.get("amount") || "0"));
-  const buyerPaymentDetails = sanitizeString(String(formData.get("buyerPaymentDetails") || ""), 500);
-  const file = formData.get("proofSlip") as File | null;
-
-  if (isNaN(amount) || amount <= 0) {
-    return { success: false, message: "Please enter a valid amount." };
-  }
-
-  if (!buyerPaymentDetails) {
-    return { success: false, message: "Please enter the Bank/Binance details you paid from." };
-  }
-
-  if (!file || file.size === 0) {
-    return { success: false, message: "Please attach a payment proof slip." };
-  }
-
-  const allowedTypes = ["image/png", "image/jpeg", "image/jpg", "image/webp", "application/pdf"];
-  if (!allowedTypes.includes(file.type)) {
-    return { success: false, message: "Only PNG, JPG, WEBP or PDF files are allowed." };
-  }
-
-  if (file.size > 5 * 1024 * 1024) {
-    return { success: false, message: "File must be smaller than 5MB." };
-  }
-
-  const uploadsDir = path.join(process.cwd(), "public", "uploads");
-  await mkdir(uploadsDir, { recursive: true });
-
-  const ext = file.name.split(".").pop() || "dat";
-  const fileName = `${buyer.id}-${Date.now()}.${ext}`;
-  const filePath = path.join(uploadsDir, fileName);
-
-  const bytes = Buffer.from(await file.arrayBuffer());
-  await writeFile(filePath, bytes);
-
-  await prisma.paymentRequest.create({
-    data: {
-      amount,
-      proofSlipUrl: `/uploads/${fileName}`,
-      buyerPaymentDetails,
-      buyerId: buyer.id
-    }
+  await prisma.notification.updateMany({
+    where: { userId: worker.id, isRead: false },
+    data: { isRead: true }
   });
 
-  revalidatePath("/dashboard/buyer");
-  revalidatePath("/dashboard/admin");
+  revalidatePath("/dashboard/worker");
+}
 
-  return { success: true, message: "Payment proof submitted. Waiting for admin approval." };
+export async function getWorkerDashboardData() {
+  const worker = await requireWorker();
+
+  const [freshWorker, submissions, settings, notifications, referrals, payoutProofs] = await Promise.all([
+    prisma.user.findUnique({ where: { id: worker.id } }),
+    prisma.accountItem.findMany({
+      where: { workerId: worker.id },
+      orderBy: { createdAt: "desc" }
+    }),
+    prisma.systemSettings.findUnique({ where: { id: "global" } }),
+    prisma.notification.findMany({
+      where: { userId: worker.id },
+      orderBy: { createdAt: "desc" },
+      take: 30
+    }),
+    prisma.user.findMany({
+      where: { referredById: worker.id },
+      select: { id: true, name: true, displayId: true, createdAt: true }
+    }),
+    prisma.payoutProof.findMany({
+      where: { workerId: worker.id },
+      orderBy: { createdAt: "desc" }
+    })
+  ]);
+
+  const unreadCount = notifications.filter((n) => !n.isRead).length;
+
+  return {
+    worker: freshWorker,
+    submissions,
+    currentRate: settings?.taskRate ?? 50,
+    notifications,
+    unreadCount,
+    referrals,
+    referralCommission: settings?.referralCommission ?? 10,
+    payoutProofs
+  };
 }
