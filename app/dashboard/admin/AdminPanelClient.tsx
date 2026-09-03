@@ -7,21 +7,18 @@ import {
   updateSystemRates,
   updateAdminPaymentDetails,
   approvePaymentRequest,
-  rejectPaymentRequest
+  rejectPaymentRequest,
+  sendAnnouncement,
+  uploadPayoutProof
 } from "@/app/actions/adminActions";
 
-type Buyer = {
-  id: string;
-  name: string;
-  email: string;
-  createdAt: string;
-};
+type Buyer = { id: string; name: string; email: string; createdAt: string };
 
 type Worker = {
   id: string;
   name: string;
   email: string;
-  workerCode: string | null;
+  displayId: string | null;
   balance: number;
   paymentDetails: string | null;
   createdAt: string;
@@ -37,20 +34,18 @@ type PaymentRequest = {
   buyer: { name: string; email: string };
 };
 
-type Settings = {
-  taskRate: number;
-  referralCommission: number;
-} | null;
-
-type AccountStat = {
-  status: string;
-  _count: { status: number };
+type PayoutProofItem = {
+  id: string;
+  amount: number;
+  proofUrl: string;
+  note: string | null;
+  createdAt: string;
+  worker: { name: string; displayId: string | null };
 };
 
-type AdminInfo = {
-  id: string;
-  paymentDetails: string | null;
-} | null;
+type Settings = { taskRate: number; referralCommission: number } | null;
+type AccountStat = { status: string; _count: { status: number } };
+type AdminInfo = { id: string; paymentDetails: string | null } | null;
 
 type AdminData = {
   admin: AdminInfo;
@@ -61,6 +56,7 @@ type AdminData = {
   allPayments: PaymentRequest[];
   settings: Settings;
   accountStats: AccountStat[];
+  payoutProofs: PayoutProofItem[];
   pendingPaymentCount: number;
   pendingBuyerCount: number;
 };
@@ -70,7 +66,15 @@ export default function AdminPanelClient({ initialData }: { initialData: AdminDa
   const [isPending, startTransition] = useTransition();
   const [rateMessage, setRateMessage] = useState<string | null>(null);
   const [paymentDetailsMessage, setPaymentDetailsMessage] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"buyers" | "workers" | "payments" | "settings">("buyers");
+  const [activeTab, setActiveTab] = useState<
+    "buyers" | "workers" | "payments" | "announcements" | "payouts" | "settings"
+  >("buyers");
+
+  const [rejectingPaymentId, setRejectingPaymentId] = useState<string | null>(null);
+  const [rejectReason, setRejectReason] = useState("");
+
+  const [announcementMessage, setAnnouncementMessage] = useState<string | null>(null);
+  const [payoutMessage, setPayoutMessage] = useState<string | null>(null);
 
   function handleApproveBuyer(id: string) {
     startTransition(async () => {
@@ -78,10 +82,7 @@ export default function AdminPanelClient({ initialData }: { initialData: AdminDa
       setData((prev) => ({
         ...prev,
         pendingBuyers: prev.pendingBuyers.filter((b) => b.id !== id),
-        approvedBuyers: [
-          ...prev.approvedBuyers,
-          prev.pendingBuyers.find((b) => b.id === id)!
-        ].filter(Boolean),
+        approvedBuyers: [...prev.approvedBuyers, prev.pendingBuyers.find((b) => b.id === id)!].filter(Boolean),
         pendingBuyerCount: prev.pendingBuyerCount - 1
       }));
     });
@@ -104,25 +105,35 @@ export default function AdminPanelClient({ initialData }: { initialData: AdminDa
       setData((prev) => ({
         ...prev,
         pendingPayments: prev.pendingPayments.filter((p) => p.id !== id),
-        allPayments: prev.allPayments.map((p) =>
-          p.id === id ? { ...p, status: "APPROVED" } : p
-        ),
+        allPayments: prev.allPayments.map((p) => (p.id === id ? { ...p, status: "APPROVED" } : p)),
         pendingPaymentCount: prev.pendingPaymentCount - 1
       }));
     });
   }
 
-  function handleRejectPayment(id: string) {
+  function openRejectModal(id: string) {
+    setRejectingPaymentId(id);
+    setRejectReason("");
+  }
+
+  function submitRejectPayment() {
+    if (!rejectingPaymentId || !rejectReason.trim()) return;
+    const fd = new FormData();
+    fd.set("reason", rejectReason.trim());
+
     startTransition(async () => {
-      await rejectPaymentRequest(id);
-      setData((prev) => ({
-        ...prev,
-        pendingPayments: prev.pendingPayments.filter((p) => p.id !== id),
-        allPayments: prev.allPayments.map((p) =>
-          p.id === id ? { ...p, status: "REJECTED" } : p
-        ),
-        pendingPaymentCount: prev.pendingPaymentCount - 1
-      }));
+      const result = await rejectPaymentRequest(rejectingPaymentId, fd);
+      if (result?.success) {
+        setData((prev) => ({
+          ...prev,
+          pendingPayments: prev.pendingPayments.filter((p) => p.id !== rejectingPaymentId),
+          allPayments: prev.allPayments.map((p) =>
+            p.id === rejectingPaymentId ? { ...p, status: "REJECTED" } : p
+          ),
+          pendingPaymentCount: prev.pendingPaymentCount - 1
+        }));
+        setRejectingPaymentId(null);
+      }
     });
   }
 
@@ -158,8 +169,27 @@ export default function AdminPanelClient({ initialData }: { initialData: AdminDa
     });
   }
 
-  const availableCount =
-    data.accountStats.find((s) => s.status === "AVAILABLE")?._count.status ?? 0;
+  async function handleSendAnnouncement(formData: FormData) {
+    setAnnouncementMessage(null);
+    startTransition(async () => {
+      const result = await sendAnnouncement(formData);
+      if (result) {
+        setAnnouncementMessage(result.message);
+      }
+    });
+  }
+
+  async function handleUploadPayout(formData: FormData) {
+    setPayoutMessage(null);
+    startTransition(async () => {
+      const result = await uploadPayoutProof(formData);
+      if (result) {
+        setPayoutMessage(result.message);
+      }
+    });
+  }
+
+  const availableCount = data.accountStats.find((s) => s.status === "AVAILABLE")?._count.status ?? 0;
   const soldCount = data.accountStats.find((s) => s.status === "SOLD")?._count.status ?? 0;
   const totalNotifications = data.pendingPaymentCount + data.pendingBuyerCount;
 
@@ -171,9 +201,8 @@ export default function AdminPanelClient({ initialData }: { initialData: AdminDa
             {totalNotifications}
           </span>
           <p className="text-sm font-semibold text-amber-200">
-            You have {data.pendingPaymentCount} pending payment
-            {data.pendingPaymentCount !== 1 ? "s" : ""} and {data.pendingBuyerCount} pending buyer
-            request{data.pendingBuyerCount !== 1 ? "s" : ""} awaiting your review.
+            You have {data.pendingPaymentCount} pending payment{data.pendingPaymentCount !== 1 ? "s" : ""} and{" "}
+            {data.pendingBuyerCount} pending buyer request{data.pendingBuyerCount !== 1 ? "s" : ""} awaiting review.
           </p>
         </div>
       )}
@@ -198,7 +227,7 @@ export default function AdminPanelClient({ initialData }: { initialData: AdminDa
       </div>
 
       <div className="mb-6 flex flex-wrap gap-2 border-b border-white/10 pb-4">
-        {(["buyers", "workers", "payments", "settings"] as const).map((t) => (
+        {(["buyers", "workers", "payments", "announcements", "payouts", "settings"] as const).map((t) => (
           <button
             key={t}
             onClick={() => setActiveTab(t)}
@@ -234,20 +263,13 @@ export default function AdminPanelClient({ initialData }: { initialData: AdminDa
             ) : (
               <div className="space-y-3">
                 {data.pendingBuyers.map((buyer) => (
-                  <div
-                    key={buyer.id}
-                    className="glass-panel flex flex-wrap items-center justify-between gap-3 p-4"
-                  >
+                  <div key={buyer.id} className="glass-panel flex flex-wrap items-center justify-between gap-3 p-4">
                     <div>
                       <p className="font-semibold text-white">{buyer.name}</p>
                       <p className="text-sm text-slate-400">{buyer.email}</p>
                     </div>
                     <div className="flex gap-2">
-                      <button
-                        disabled={isPending}
-                        onClick={() => handleApproveBuyer(buyer.id)}
-                        className="btn-primary !px-4 !py-2 text-sm"
-                      >
+                      <button disabled={isPending} onClick={() => handleApproveBuyer(buyer.id)} className="btn-primary !px-4 !py-2 text-sm">
                         Approve
                       </button>
                       <button
@@ -274,11 +296,7 @@ export default function AdminPanelClient({ initialData }: { initialData: AdminDa
               <div className="overflow-x-auto">
                 <table className="table-glass">
                   <thead>
-                    <tr>
-                      <th>Name</th>
-                      <th>Email</th>
-                      <th>Joined</th>
-                    </tr>
+                    <tr><th>Name</th><th>Email</th><th>Joined</th></tr>
                   </thead>
                   <tbody>
                     {data.approvedBuyers.map((b) => (
@@ -298,9 +316,7 @@ export default function AdminPanelClient({ initialData }: { initialData: AdminDa
 
       {activeTab === "workers" && (
         <section>
-          <h2 className="mb-4 text-lg font-semibold text-white">
-            Workers ({data.workers.length})
-          </h2>
+          <h2 className="mb-4 text-lg font-semibold text-white">Workers ({data.workers.length})</h2>
           {data.workers.length === 0 ? (
             <p className="glass-panel p-6 text-sm text-slate-400">No workers yet.</p>
           ) : (
@@ -310,8 +326,7 @@ export default function AdminPanelClient({ initialData }: { initialData: AdminDa
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
                       <p className="font-semibold text-white">
-                        <span className="font-mono text-galaxy-accent2">{w.workerCode}</span> —{" "}
-                        {w.name}
+                        <span className="font-mono text-galaxy-accent2">{w.displayId}</span> — {w.name}
                       </p>
                       <p className="text-sm text-slate-400">{w.email}</p>
                     </div>
@@ -322,9 +337,7 @@ export default function AdminPanelClient({ initialData }: { initialData: AdminDa
                       Payment Details (Bank / Binance)
                     </p>
                     <p className="whitespace-pre-wrap text-sm text-slate-200">
-                      {w.paymentDetails || (
-                        <span className="italic text-slate-500">Not provided yet</span>
-                      )}
+                      {w.paymentDetails || <span className="italic text-slate-500">Not provided yet</span>}
                     </p>
                   </div>
                 </div>
@@ -348,42 +361,27 @@ export default function AdminPanelClient({ initialData }: { initialData: AdminDa
                   <div key={p.id} className="glass-panel p-4">
                     <div className="flex flex-wrap items-start justify-between gap-4">
                       <div className="flex-1">
-                        <p className="font-semibold text-white">
-                          {p.buyer.name} — Rs. {p.amount.toFixed(2)}
-                        </p>
+                        <p className="font-semibold text-white">{p.buyer.name} — Rs. {p.amount.toFixed(2)}</p>
                         <p className="text-sm text-slate-400">{p.buyer.email}</p>
-                        <a
-                          href={p.proofSlipUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-xs font-semibold text-galaxy-accent2 hover:underline"
-                        >
+                        <a href={p.proofSlipUrl} target="_blank" rel="noopener noreferrer" className="text-xs font-semibold text-galaxy-accent2 hover:underline">
                           View Proof Slip →
                         </a>
-
                         <div className="mt-3 rounded-lg border border-white/10 bg-white/5 p-3">
                           <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">
                             Buyer Paid From (Bank / Binance)
                           </p>
                           <p className="whitespace-pre-wrap text-sm text-slate-200">
-                            {p.buyerPaymentDetails || (
-                              <span className="italic text-slate-500">Not provided</span>
-                            )}
+                            {p.buyerPaymentDetails || <span className="italic text-slate-500">Not provided</span>}
                           </p>
                         </div>
                       </div>
-
                       <div className="flex gap-2">
-                        <button
-                          disabled={isPending}
-                          onClick={() => handleApprovePayment(p.id)}
-                          className="btn-primary !px-4 !py-2 text-sm"
-                        >
+                        <button disabled={isPending} onClick={() => handleApprovePayment(p.id)} className="btn-primary !px-4 !py-2 text-sm">
                           Approve
                         </button>
                         <button
                           disabled={isPending}
-                          onClick={() => handleRejectPayment(p.id)}
+                          onClick={() => openRejectModal(p.id)}
                           className="btn-secondary !px-4 !py-2 text-sm hover:!border-rose-400 hover:!text-rose-400"
                         >
                           Reject
@@ -401,12 +399,7 @@ export default function AdminPanelClient({ initialData }: { initialData: AdminDa
             <div className="overflow-x-auto">
               <table className="table-glass">
                 <thead>
-                  <tr>
-                    <th>Buyer</th>
-                    <th>Amount</th>
-                    <th>Status</th>
-                    <th>Date</th>
-                  </tr>
+                  <tr><th>Buyer</th><th>Amount</th><th>Status</th><th>Date</th></tr>
                 </thead>
                 <tbody>
                   {data.allPayments.map((p) => (
@@ -414,15 +407,7 @@ export default function AdminPanelClient({ initialData }: { initialData: AdminDa
                       <td>{p.buyer.name}</td>
                       <td>Rs. {p.amount.toFixed(2)}</td>
                       <td>
-                        <span
-                          className={
-                            p.status === "APPROVED"
-                              ? "badge-approved"
-                              : p.status === "REJECTED"
-                              ? "badge-rejected"
-                              : "badge-pending"
-                          }
-                        >
+                        <span className={p.status === "APPROVED" ? "badge-approved" : p.status === "REJECTED" ? "badge-rejected" : "badge-pending"}>
                           {p.status}
                         </span>
                       </td>
@@ -436,46 +421,146 @@ export default function AdminPanelClient({ initialData }: { initialData: AdminDa
         </div>
       )}
 
+      {activeTab === "announcements" && (
+        <section className="glass-panel max-w-lg p-6">
+          <h2 className="mb-1 text-lg font-semibold text-white">Send Announcement</h2>
+          <p className="mb-4 text-xs text-slate-400">
+            Send a message to a specific worker, or broadcast to all workers at once.
+          </p>
+          <form action={handleSendAnnouncement} className="space-y-4">
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-slate-300">Send To</label>
+              <select name="targetWorkerId" required className="glass-input">
+                <option value="ALL">All Workers</option>
+                {data.workers.map((w) => (
+                  <option key={w.id} value={w.id}>
+                    {w.displayId} — {w.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-slate-300">Title</label>
+              <input type="text" name="title" required className="glass-input" placeholder="e.g. Rate Update" />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-slate-300">Message</label>
+              <textarea name="message" required rows={4} className="glass-input resize-none" placeholder="Type your announcement here..." />
+            </div>
+
+            {announcementMessage && (
+              <div className="rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">
+                {announcementMessage}
+              </div>
+            )}
+
+            <button type="submit" disabled={isPending} className="btn-primary w-full">
+              {isPending ? "Sending..." : "Send Announcement"}
+            </button>
+          </form>
+        </section>
+      )}
+
+      {activeTab === "payouts" && (
+        <div className="space-y-8">
+          <section className="glass-panel max-w-lg p-6">
+            <h2 className="mb-1 text-lg font-semibold text-white">Upload Payout Proof</h2>
+            <p className="mb-4 text-xs text-slate-400">
+              After paying a worker, upload the transaction slip/screenshot here. The worker will
+              be notified and can view this proof only for their own payouts.
+            </p>
+            <form action={handleUploadPayout} className="space-y-4">
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-slate-300">Worker</label>
+                <select name="workerId" required className="glass-input">
+                  <option value="">Select a worker...</option>
+                  {data.workers.map((w) => (
+                    <option key={w.id} value={w.id}>
+                      {w.displayId} — {w.name} (Balance: Rs. {w.balance.toFixed(2)})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-slate-300">Amount Paid</label>
+                <input type="number" name="amount" step="0.01" min="0" required className="glass-input" placeholder="0.00" />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-slate-300">Note (optional)</label>
+                <input type="text" name="note" className="glass-input" placeholder="e.g. September payout" />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-slate-300">Proof (Slip / Screenshot)</label>
+                <input
+                  type="file"
+                  name="proofFile"
+                  required
+                  accept="image/png,image/jpeg,image/jpg,image/webp,application/pdf"
+                  className="glass-input file:mr-4 file:rounded-lg file:border-0 file:bg-galaxy-accent file:px-3 file:py-1.5 file:text-sm file:text-white"
+                />
+              </div>
+
+              {payoutMessage && (
+                <div className="rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">
+                  {payoutMessage}
+                </div>
+              )}
+
+              <button type="submit" disabled={isPending} className="btn-primary w-full">
+                {isPending ? "Uploading..." : "Upload & Notify Worker"}
+              </button>
+            </form>
+          </section>
+
+          <section>
+            <h2 className="mb-4 text-lg font-semibold text-white">Recent Payouts</h2>
+            {data.payoutProofs.length === 0 ? (
+              <p className="glass-panel p-6 text-sm text-slate-400">No payouts recorded yet.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="table-glass">
+                  <thead>
+                    <tr><th>Worker</th><th>Amount</th><th>Date</th><th>Proof</th></tr>
+                  </thead>
+                  <tbody>
+                    {data.payoutProofs.map((p) => (
+                      <tr key={p.id}>
+                        <td>{p.worker.displayId} — {p.worker.name}</td>
+                        <td>Rs. {p.amount.toFixed(2)}</td>
+                        <td>{new Date(p.createdAt).toLocaleDateString()}</td>
+                        <td>
+                          <a href={p.proofUrl} target="_blank" rel="noopener noreferrer" className="text-galaxy-accent2 hover:underline">
+                            View
+                          </a>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+        </div>
+      )}
+
       {activeTab === "settings" && (
         <div className="grid gap-6 sm:grid-cols-2">
           <section className="glass-panel p-6">
             <h2 className="mb-4 text-lg font-semibold text-white">Global Rate Settings</h2>
             <form action={handleRateUpdate} className="space-y-4">
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-slate-300">
-                  Task Rate (per submission)
-                </label>
-                <input
-                  type="number"
-                  name="taskRate"
-                  step="0.01"
-                  min="0"
-                  required
-                  defaultValue={data.settings?.taskRate ?? 50}
-                  className="glass-input"
-                />
+                <label className="mb-1.5 block text-sm font-medium text-slate-300">Task Rate (per submission)</label>
+                <input type="number" name="taskRate" step="0.01" min="0" required defaultValue={data.settings?.taskRate ?? 50} className="glass-input" />
               </div>
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-slate-300">
-                  Referral Commission (%)
-                </label>
-                <input
-                  type="number"
-                  name="referralCommission"
-                  step="0.01"
-                  min="0"
-                  required
-                  defaultValue={data.settings?.referralCommission ?? 10}
-                  className="glass-input"
-                />
+                <label className="mb-1.5 block text-sm font-medium text-slate-300">Referral Commission (%)</label>
+                <input type="number" name="referralCommission" step="0.01" min="0" required defaultValue={data.settings?.referralCommission ?? 10} className="glass-input" />
               </div>
-
               {rateMessage && (
                 <div className="rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">
                   {rateMessage}
                 </div>
               )}
-
               <button type="submit" disabled={isPending} className="btn-primary w-full">
                 {isPending ? "Updating..." : "Update Rates"}
               </button>
@@ -483,12 +568,9 @@ export default function AdminPanelClient({ initialData }: { initialData: AdminDa
           </section>
 
           <section className="glass-panel p-6">
-            <h2 className="mb-1 text-lg font-semibold text-white">
-              Your Payment Receiving Details
-            </h2>
+            <h2 className="mb-1 text-lg font-semibold text-white">Your Payment Receiving Details</h2>
             <p className="mb-4 text-xs text-slate-400">
-              Enter your Bank Account or Binance ID here. This is shown only to approved Buyers so
-              they know where to send payments.
+              Shown only to approved Buyers so they know where to send payments.
             </p>
             <form action={handleAdminPaymentDetailsUpdate} className="space-y-4">
               <textarea
@@ -499,18 +581,47 @@ export default function AdminPanelClient({ initialData }: { initialData: AdminDa
                 className="glass-input resize-none"
                 placeholder={"Bank: Commercial Bank\nAcc No: 987654321\nName: Galaxy Workers\n\nOR\n\nBinance ID: 987654321"}
               />
-
               {paymentDetailsMessage && (
                 <div className="rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">
                   {paymentDetailsMessage}
                 </div>
               )}
-
               <button type="submit" disabled={isPending} className="btn-primary w-full">
                 {isPending ? "Saving..." : "Save Payment Details"}
               </button>
             </form>
           </section>
+        </div>
+      )}
+
+      {rejectingPaymentId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-6">
+          <div className="glass-panel w-full max-w-md p-6">
+            <h3 className="mb-3 text-lg font-semibold text-white">Reject Payment Request</h3>
+            <label className="mb-1.5 block text-sm font-medium text-slate-300">Rejection Reason</label>
+            <textarea
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+              rows={4}
+              className="glass-input resize-none"
+              placeholder="e.g. Proof slip does not match the amount stated."
+            />
+            <div className="mt-4 flex gap-3">
+              <button
+                onClick={() => setRejectingPaymentId(null)}
+                className="btn-secondary flex-1"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={submitRejectPayment}
+                disabled={isPending || !rejectReason.trim()}
+                className="btn-primary flex-1"
+              >
+                {isPending ? "Rejecting..." : "Confirm Reject"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
