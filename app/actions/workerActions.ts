@@ -24,6 +24,11 @@ export async function submitGmailAccount(formData: FormData) {
     return { success: false, message: "Please provide a valid Gmail address and its password." };
   }
 
+  const duplicate = await prisma.accountItem.findFirst({ where: { gmail } });
+  if (duplicate) {
+    return { success: false, message: "This Gmail account has already been submitted before." };
+  }
+
   const settings = await prisma.systemSettings.findUnique({ where: { id: "global" } });
   const currentRate = settings?.taskRate ?? 50;
 
@@ -44,7 +49,7 @@ export async function submitGmailAccount(formData: FormData) {
 
   revalidatePath("/dashboard/worker");
 
-  return { success: true, message: `Account submitted! ${currentRate} added to your balance.` };
+  return { success: true, message: `Account submitted! Rs. ${currentRate} added to your balance.` };
 }
 
 export async function updateWorkerPaymentDetails(formData: FormData) {
@@ -66,21 +71,63 @@ export async function updateWorkerPaymentDetails(formData: FormData) {
   return { success: true, message: "Payment details saved successfully." };
 }
 
+export async function markNotificationAsRead(notificationId: string) {
+  const worker = await requireWorker();
+
+  await prisma.notification.update({
+    where: { id: notificationId, userId: worker.id },
+    data: { isRead: true }
+  });
+
+  revalidatePath("/dashboard/worker");
+}
+
+export async function markAllNotificationsAsRead() {
+  const worker = await requireWorker();
+
+  await prisma.notification.updateMany({
+    where: { userId: worker.id, isRead: false },
+    data: { isRead: true }
+  });
+
+  revalidatePath("/dashboard/worker");
+}
+
 export async function getWorkerDashboardData() {
   const worker = await requireWorker();
 
-  const [freshWorker, submissions, settings] = await Promise.all([
+  const [freshWorker, submissions, settings, notifications, referrals, payoutProofs] = await Promise.all([
     prisma.user.findUnique({ where: { id: worker.id } }),
     prisma.accountItem.findMany({
       where: { workerId: worker.id },
       orderBy: { createdAt: "desc" }
     }),
-    prisma.systemSettings.findUnique({ where: { id: "global" } })
+    prisma.systemSettings.findUnique({ where: { id: "global" } }),
+    prisma.notification.findMany({
+      where: { userId: worker.id },
+      orderBy: { createdAt: "desc" },
+      take: 30
+    }),
+    prisma.user.findMany({
+      where: { referredById: worker.id },
+      select: { id: true, name: true, displayId: true, createdAt: true }
+    }),
+    prisma.payoutProof.findMany({
+      where: { workerId: worker.id },
+      orderBy: { createdAt: "desc" }
+    })
   ]);
+
+  const unreadCount = notifications.filter((n) => !n.isRead).length;
 
   return {
     worker: freshWorker,
     submissions,
-    currentRate: settings?.taskRate ?? 50
+    currentRate: settings?.taskRate ?? 50,
+    notifications,
+    unreadCount,
+    referrals,
+    referralCommission: settings?.referralCommission ?? 10,
+    payoutProofs
   };
 }
