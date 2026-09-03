@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { registerWorker, registerBuyer } from "@/app/actions/authActions";
 import Link from "next/link";
 
@@ -13,6 +13,8 @@ export default function RegisterPage() {
   const [isError, setIsError] = useState(false);
   const [isPending, startTransition] = useTransition();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const refCode = searchParams.get("ref") || "";
 
   async function handleSubmit(formData: FormData) {
     setMessage(null);
@@ -39,6 +41,12 @@ export default function RegisterPage() {
           <h1 className="text-2xl font-bold text-white">Join Galaxy Workers</h1>
           <p className="mt-1 text-sm text-slate-400">Choose your role to get started</p>
         </div>
+
+        {refCode && tab === "worker" && (
+          <div className="mb-4 rounded-xl border border-galaxy-accent2/30 bg-galaxy-accent2/10 px-4 py-2 text-xs text-galaxy-accent2">
+            You were referred by a Galaxy Workers member! 🎉
+          </div>
+        )}
 
         <div className="mb-6 flex rounded-xl border border-white/10 bg-white/5 p-1">
           <button
@@ -72,6 +80,8 @@ export default function RegisterPage() {
         </div>
 
         <form action={handleSubmit} className="space-y-4">
+          {tab === "worker" && <input type="hidden" name="ref" value={refCode} />}
+
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-300">
               Full Name
