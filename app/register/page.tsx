@@ -1,20 +1,24 @@
 "use client";
 
-import { useState, useTransition, Suspense } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useState, useTransition, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { registerWorker, registerBuyer } from "@/app/actions/authActions";
 import Link from "next/link";
 
 type Tab = "worker" | "buyer";
 
-function RegisterForm() {
+export default function RegisterPage() {
   const [tab, setTab] = useState<Tab>("worker");
   const [message, setMessage] = useState<string | null>(null);
   const [isError, setIsError] = useState(false);
   const [isPending, startTransition] = useTransition();
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const refCode = searchParams.get("ref") || "";
+  const [refCode, setRefCode] = useState("");
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    setRefCode(params.get("ref") || "");
+  }, []);
 
   async function handleSubmit(formData: FormData) {
     setMessage(null);
@@ -147,13 +151,5 @@ function RegisterForm() {
         </p>
       </div>
     </div>
-  );
-}
-
-export default function RegisterPage() {
-  return (
-    <Suspense fallback={<div className="flex min-h-screen items-center justify-center text-slate-400">Loading...</div>}>
-      <RegisterForm />
-    </Suspense>
   );
 }
