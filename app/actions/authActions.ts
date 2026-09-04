@@ -18,12 +18,17 @@ export async function registerWorker(formData: FormData): Promise<AuthResult> {
   const email = sanitizeString(String(formData.get("email") || "")).toLowerCase();
   const password = String(formData.get("password") || "");
   const refCode = sanitizeString(String(formData.get("ref") || ""));
+  const country = sanitizeString(String(formData.get("country") || ""), 50);
 
   if (!name || !isValidEmail(email) || !isStrongEnough(password)) {
     return {
       success: false,
       message: "Please provide valid name, email and a password of at least 6 characters."
     };
+  }
+
+  if (!country) {
+    return { success: false, message: "Please select your country." };
   }
 
   const existing = await prisma.user.findUnique({ where: { email } });
@@ -51,6 +56,7 @@ export async function registerWorker(formData: FormData): Promise<AuthResult> {
       initials,
       referralCode: ownReferralCode,
       referredById: referrer?.id ?? null,
+      country,
       isApproved: true
     }
   });
@@ -64,6 +70,7 @@ export async function registerBuyer(formData: FormData): Promise<AuthResult> {
   const name = sanitizeString(String(formData.get("name") || ""));
   const email = sanitizeString(String(formData.get("email") || "")).toLowerCase();
   const password = String(formData.get("password") || "");
+  const country = sanitizeString(String(formData.get("country") || ""), 50);
 
   if (!name || !isValidEmail(email) || !isStrongEnough(password)) {
     return {
@@ -85,6 +92,7 @@ export async function registerBuyer(formData: FormData): Promise<AuthResult> {
       email,
       password: hashedPassword,
       role: Role.BUYER,
+      country: country || null,
       isApproved: false
     }
   });
