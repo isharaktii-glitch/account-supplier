@@ -42,6 +42,19 @@ type Referral = { id: string; name: string; displayId: string | null; createdAt:
 type PayoutProof = { id: string; amount: number; proofUrl: string; note: string | null; createdAt: string };
 type PayoutRequestItem = { id: string; amount: number; status: string; createdAt: string };
 
+type WorkerPanelClientProps = {
+  initialWorker: Worker;
+  initialSubmissions: Submission[];
+  currentRate: number;
+  initialNotifications: NotificationItem[];
+  initialUnreadCount: number;
+  referrals: Referral[];
+  referralCommission: number;
+  payoutProofs: PayoutProof[];
+  payoutRequests: PayoutRequestItem[];
+  isSystemPaused: boolean;
+};
+
 export default function WorkerPanelClient({
   initialWorker,
   initialSubmissions,
@@ -53,18 +66,7 @@ export default function WorkerPanelClient({
   payoutProofs,
   payoutRequests,
   isSystemPaused
-}: {
-  initialWorker: Worker;
-  initialSubmissions: Submission[];
-  currentRate: number;
-  initialNotifications: NotificationItem[];
-  initialUnreadCount: number;
-  referrals: Referral[];
-  referralCommission: number;
-  payoutProofs: PayoutProof[];
-  payoutRequests: PayoutRequestItem[];
-  isSystemPaused: boolean;
-}) {
+}: WorkerPanelClientProps) {
   const [worker, setWorker] = useState(initialWorker);
   const [submissions, setSubmissions] = useState(initialSubmissions);
   const [message, setMessage] = useState<string | null>(null);
