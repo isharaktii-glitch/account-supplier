@@ -3,6 +3,7 @@
 import { useState, useTransition, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { registerWorker, registerBuyer } from "@/app/actions/authActions";
+import { COUNTRIES } from "@/lib/countries";
 import Link from "next/link";
 
 type Tab = "worker" | "buyer";
@@ -55,28 +56,18 @@ export default function RegisterPage() {
         <div className="mb-6 flex rounded-xl border border-white/10 bg-white/5 p-1">
           <button
             type="button"
-            onClick={() => {
-              setTab("worker");
-              setMessage(null);
-            }}
+            onClick={() => { setTab("worker"); setMessage(null); }}
             className={`flex-1 rounded-lg py-2 text-sm font-semibold transition ${
-              tab === "worker"
-                ? "bg-gradient-to-r from-galaxy-accent to-galaxy-glow text-white shadow-glow-purple"
-                : "text-slate-400 hover:text-slate-200"
+              tab === "worker" ? "bg-gradient-to-r from-galaxy-accent to-galaxy-glow text-white shadow-glow-purple" : "text-slate-400 hover:text-slate-200"
             }`}
           >
             I&apos;m a Worker
           </button>
           <button
             type="button"
-            onClick={() => {
-              setTab("buyer");
-              setMessage(null);
-            }}
+            onClick={() => { setTab("buyer"); setMessage(null); }}
             className={`flex-1 rounded-lg py-2 text-sm font-semibold transition ${
-              tab === "buyer"
-                ? "bg-gradient-to-r from-galaxy-accent to-galaxy-glow text-white shadow-glow-purple"
-                : "text-slate-400 hover:text-slate-200"
+              tab === "buyer" ? "bg-gradient-to-r from-galaxy-accent to-galaxy-glow text-white shadow-glow-purple" : "text-slate-400 hover:text-slate-200"
             }`}
           >
             I&apos;m a Buyer
@@ -87,37 +78,28 @@ export default function RegisterPage() {
           {tab === "worker" && <input type="hidden" name="ref" value={refCode} />}
 
           <div>
-            <label className="mb-1.5 block text-sm font-medium text-slate-300">
-              Full Name
-            </label>
+            <label className="mb-1.5 block text-sm font-medium text-slate-300">Full Name</label>
             <input type="text" name="name" required className="glass-input" placeholder="John Doe" />
           </div>
 
           <div>
-            <label className="mb-1.5 block text-sm font-medium text-slate-300">
-              Email Address
-            </label>
-            <input
-              type="email"
-              name="email"
-              required
-              className="glass-input"
-              placeholder="you@example.com"
-            />
+            <label className="mb-1.5 block text-sm font-medium text-slate-300">Email Address</label>
+            <input type="email" name="email" required className="glass-input" placeholder="you@example.com" />
           </div>
 
           <div>
-            <label className="mb-1.5 block text-sm font-medium text-slate-300">
-              Password
-            </label>
-            <input
-              type="password"
-              name="password"
-              required
-              minLength={6}
-              className="glass-input"
-              placeholder="At least 6 characters"
-            />
+            <label className="mb-1.5 block text-sm font-medium text-slate-300">Country</label>
+            <select name="country" required className="glass-input">
+              <option value="">Select your country...</option>
+              {COUNTRIES.map((c) => (
+                <option key={c.code} value={c.code}>{c.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-slate-300">Password</label>
+            <input type="password" name="password" required minLength={6} className="glass-input" placeholder="At least 6 characters" />
           </div>
 
           {tab === "buyer" && (
@@ -127,13 +109,7 @@ export default function RegisterPage() {
           )}
 
           {message && (
-            <div
-              className={`rounded-xl border px-4 py-3 text-sm ${
-                isError
-                  ? "border-rose-400/30 bg-rose-500/10 text-rose-300"
-                  : "border-emerald-400/30 bg-emerald-500/10 text-emerald-300"
-              }`}
-            >
+            <div className={`rounded-xl border px-4 py-3 text-sm ${isError ? "border-rose-400/30 bg-rose-500/10 text-rose-300" : "border-emerald-400/30 bg-emerald-500/10 text-emerald-300"}`}>
               {message}
             </div>
           )}
@@ -145,9 +121,7 @@ export default function RegisterPage() {
 
         <p className="mt-6 text-center text-sm text-slate-400">
           Already registered?{" "}
-          <Link href="/login" className="font-semibold text-galaxy-accent2 hover:underline">
-            Sign in
-          </Link>
+          <Link href="/login" className="font-semibold text-galaxy-accent2 hover:underline">Sign in</Link>
         </p>
       </div>
     </div>
