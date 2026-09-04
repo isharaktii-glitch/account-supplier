@@ -2,7 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
-import { Role, PaymentStatus, AccountStatus, NotificationType } from "@prisma/client";
+import { Role, PaymentStatus, AccountStatus, NotificationType, PayoutRequestStatus } from "@prisma/client";
 import { sanitizeString } from "@/lib/validation";
 import { revalidatePath } from "next/cache";
 import { writeFile, mkdir } from "fs/promises";
@@ -59,6 +59,29 @@ export async function updateSystemRates(formData: FormData) {
   return { success: true, message: "Rates updated successfully." };
 }
 
+export async function toggleSystemPause() {
+  await requireAdmin();
+
+  const settings = await prisma.systemSettings.findUnique({ where: { id: "global" } });
+  const newState = !(settings?.isSystemPaused ?? false);
+
+  await prisma.systemSettings.upsert({
+    where: { id: "global" },
+    update: { isSystemPaused: newState },
+    create: { id: "global", isSystemPaused: newState }
+  });
+
+  revalidatePath("/dashboard/admin");
+  revalidatePath("/dashboard/worker");
+  revalidatePath("/dashboard/buyer");
+
+  return {
+    success: true,
+    message: newState ? "System paused. Workers cannot submit accounts." : "System resumed.",
+    isPaused: newState
+  };
+}
+
 export async function updateAdminPaymentDetails(formData: FormData) {
   const admin = await requireAdmin();
 
@@ -82,13 +105,8 @@ export async function updateAdminPaymentDetails(formData: FormData) {
 export async function approvePaymentRequest(requestId: string) {
   await requireAdmin();
 
-  const request = await prisma.paymentRequest.findUnique({
-    where: { id: requestId }
-  });
-
-  if (!request) {
-    throw new Error("Payment request not found.");
-  }
+  const request = await prisma.paymentRequest.findUnique({ where: { id: requestId } });
+  if (!request) throw new Error("Payment request not found.");
 
   await prisma.paymentRequest.update({
     where: { id: requestId },
@@ -112,7 +130,6 @@ export async function rejectPaymentRequest(requestId: string, formData: FormData
   await requireAdmin();
 
   const reason = sanitizeString(String(formData.get("reason") || ""), 500);
-
   if (!reason) {
     return { success: false, message: "Please provide a rejection reason." };
   }
@@ -163,7 +180,6 @@ export async function rejectAccountItem(accountId: string, formData: FormData) {
   await requireAdmin();
 
   const reason = sanitizeString(String(formData.get("reason") || ""), 500);
-
   if (!reason) {
     return { success: false, message: "Please provide a rejection reason." };
   }
@@ -200,11 +216,7 @@ export async function sendAnnouncement(formData: FormData) {
   }
 
   if (targetWorkerId === "ALL") {
-    const workers = await prisma.user.findMany({
-      where: { role: Role.WORKER },
-      select: { id: true }
-    });
-
+    const workers = await prisma.user.findMany({ where: { role: Role.WORKER }, select: { id: true } });
     if (workers.length === 0) {
       return { success: false, message: "No workers to send announcements to." };
     }
@@ -226,12 +238,7 @@ export async function sendAnnouncement(formData: FormData) {
   }
 
   await prisma.notification.create({
-    data: {
-      userId: targetWorkerId,
-      type: NotificationType.ANNOUNCEMENT,
-      title,
-      message
-    }
+    data: { userId: targetWorkerId, type: NotificationType.ANNOUNCEMENT, title, message }
   });
 
   return { success: true, message: "Announcement sent successfully." };
@@ -245,23 +252,14 @@ export async function uploadPayoutProof(formData: FormData) {
   const note = sanitizeString(String(formData.get("note") || ""), 300);
   const file = formData.get("proofFile") as File | null;
 
-  if (!workerId) {
-    return { success: false, message: "Please select a worker." };
-  }
-
-  if (isNaN(amount) || amount <= 0) {
-    return { success: false, message: "Please enter a valid amount." };
-  }
-
-  if (!file || file.size === 0) {
-    return { success: false, message: "Please attach a payout proof (slip / screenshot)." };
-  }
+  if (!workerId) return { success: false, message: "Please select a worker." };
+  if (isNaN(amount) || amount <= 0) return { success: false, message: "Please enter a valid amount." };
+  if (!file || file.size === 0) return { success: false, message: "Please attach a payout proof." };
 
   const allowedTypes = ["image/png", "image/jpeg", "image/jpg", "image/webp", "application/pdf"];
   if (!allowedTypes.includes(file.type)) {
     return { success: false, message: "Only PNG, JPG, WEBP or PDF files are allowed." };
   }
-
   if (file.size > 5 * 1024 * 1024) {
     return { success: false, message: "File must be smaller than 5MB." };
   }
@@ -272,34 +270,81 @@ export async function uploadPayoutProof(formData: FormData) {
   const ext = file.name.split(".").pop() || "dat";
   const fileName = `payout-${workerId}-${Date.now()}.${ext}`;
   const filePath = path.join(uploadsDir, fileName);
-
   const bytes = Buffer.from(await file.arrayBuffer());
   await writeFile(filePath, bytes);
 
-  await prisma.payoutProof.create({
-    data: {
-      workerId,
-      amount,
-      proofUrl: `/uploads/${fileName}`,
-      note: note || null
-    }
+  const worker = await prisma.user.findUnique({ where: { id: workerId } });
+  if (!worker || worker.balance < amount) {
+    return { success: false, message: "Amount exceeds worker's available balance." };
+  }
+
+  await prisma.$transaction([
+    prisma.payoutProof.create({
+      data: { workerId, amount, proofUrl: `/uploads/${fileName}`, note: note || null }
+    }),
+    prisma.user.update({
+      where: { id: workerId },
+      data: { balance: { decrement: amount } }
+    }),
+    prisma.notification.create({
+      data: {
+        userId: workerId,
+        type: NotificationType.PAYMENT_RECEIVED,
+        title: "Payment Received",
+        message: `You have received a payment of Rs. ${amount.toFixed(2)} from the admin.${note ? ` Note: ${note}` : ""}`
+      }
+    })
+  ]);
+
+  revalidatePath("/dashboard/admin");
+  revalidatePath("/dashboard/worker");
+
+  return { success: true, message: "Payout proof uploaded, balance deducted, and worker notified." };
+}
+
+export async function approvePayoutRequest(requestId: string) {
+  await requireAdmin();
+
+  const request = await prisma.payoutRequest.findUnique({ where: { id: requestId } });
+  if (!request) throw new Error("Payout request not found.");
+
+  await prisma.payoutRequest.update({
+    where: { id: requestId },
+    data: { status: PayoutRequestStatus.APPROVED }
   });
 
   await prisma.notification.create({
     data: {
-      userId: workerId,
+      userId: request.workerId,
       type: NotificationType.PAYMENT_RECEIVED,
-      title: "Payment Received",
-      message: `You have received a payment of Rs. ${amount.toFixed(2)} from the admin.${
-        note ? ` Note: ${note}` : ""
-      }`
+      title: "Payout Request Approved",
+      message: `Your payout request of Rs. ${request.amount.toFixed(2)} was approved. The admin will process your payment shortly.`
     }
   });
 
   revalidatePath("/dashboard/admin");
   revalidatePath("/dashboard/worker");
+}
 
-  return { success: true, message: "Payout proof uploaded and worker notified." };
+export async function rejectPayoutRequest(requestId: string) {
+  await requireAdmin();
+
+  const request = await prisma.payoutRequest.update({
+    where: { id: requestId },
+    data: { status: PayoutRequestStatus.REJECTED }
+  });
+
+  await prisma.notification.create({
+    data: {
+      userId: request.workerId,
+      type: NotificationType.PAYMENT_RECEIVED,
+      title: "Payout Request Rejected",
+      message: `Your payout request of Rs. ${request.amount.toFixed(2)} was rejected.`
+    }
+  });
+
+  revalidatePath("/dashboard/admin");
+  revalidatePath("/dashboard/worker");
 }
 
 export async function getAdminDashboardData() {
@@ -314,7 +359,8 @@ export async function getAdminDashboardData() {
     allPayments,
     settings,
     accountStats,
-    payoutProofs
+    payoutProofs,
+    payoutRequests
   ] = await Promise.all([
     prisma.user.findUnique({ where: { id: admin.id } }),
     prisma.user.findMany({ where: { role: Role.BUYER, isApproved: false }, orderBy: { createdAt: "desc" } }),
@@ -331,14 +377,16 @@ export async function getAdminDashboardData() {
       take: 20
     }),
     prisma.systemSettings.findUnique({ where: { id: "global" } }),
-    prisma.accountItem.groupBy({
-      by: ["status"],
-      _count: { status: true }
-    }),
+    prisma.accountItem.groupBy({ by: ["status"], _count: { status: true } }),
     prisma.payoutProof.findMany({
       include: { worker: { select: { name: true, displayId: true } } },
       orderBy: { createdAt: "desc" },
       take: 20
+    }),
+    prisma.payoutRequest.findMany({
+      where: { status: PayoutRequestStatus.PENDING },
+      include: { worker: { select: { name: true, displayId: true, balance: true } } },
+      orderBy: { createdAt: "desc" }
     })
   ]);
 
@@ -352,7 +400,10 @@ export async function getAdminDashboardData() {
     settings,
     accountStats,
     payoutProofs,
+    payoutRequests,
     pendingPaymentCount: pendingPayments.length,
-    pendingBuyerCount: pendingBuyers.length
+    pendingBuyerCount: pendingBuyers.length,
+    pendingPayoutRequestCount: payoutRequests.length,
+    isSystemPaused: settings?.isSystemPaused ?? false
   };
 }
