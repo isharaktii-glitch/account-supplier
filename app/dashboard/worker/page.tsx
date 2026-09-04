@@ -19,6 +19,12 @@ export default async function WorkerDashboardPage({
       <Navbar />
       <div className="px-6 py-10">
         <div className="mx-auto max-w-6xl">
+          {data.isSystemPaused && (
+            <div className="mb-6 rounded-xl border border-amber-400/40 bg-amber-500/10 px-5 py-4 text-sm font-semibold text-amber-200">
+              ⚠️ The system is currently paused by the admin. Account submissions are temporarily disabled.
+            </div>
+          )}
+
           <div className="mb-8">
             <div className="badge-pending mb-2 inline-flex bg-galaxy-accent2/15 text-galaxy-accent2 border-galaxy-accent2/30">
               Worker ID: {data.worker?.displayId}
@@ -44,6 +50,8 @@ export default async function WorkerDashboardPage({
             referrals={JSON.parse(JSON.stringify(data.referrals))}
             referralCommission={data.referralCommission}
             payoutProofs={JSON.parse(JSON.stringify(data.payoutProofs))}
+            payoutRequests={JSON.parse(JSON.stringify(data.payoutRequests))}
+            isSystemPaused={data.isSystemPaused}
           />
         </div>
       </div>
