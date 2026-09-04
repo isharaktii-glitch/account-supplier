@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
 import { Role, NotificationType } from "@prisma/client";
 import { sanitizeString, isValidEmail } from "@/lib/validation";
+import { getRateForCountry } from "@/lib/rates";
 import { revalidatePath } from "next/cache";
 
 async function requireWorker() {
@@ -34,16 +35,11 @@ export async function submitGmailAccount(formData: FormData) {
     return { success: false, message: "This Gmail account has already been submitted before." };
   }
 
-  const currentRate = settings?.taskRate ?? 50;
+  const currentRate = await getRateForCountry(worker.country);
 
   await prisma.$transaction([
     prisma.accountItem.create({
-      data: {
-        gmail,
-        password: accountPassword,
-        workerId: worker.id,
-        rateAtEntry: currentRate
-      }
+      data: { gmail, password: accountPassword, workerId: worker.id, rateAtEntry: currentRate }
     }),
     prisma.user.update({
       where: { id: worker.id },
@@ -53,26 +49,18 @@ export async function submitGmailAccount(formData: FormData) {
 
   revalidatePath("/dashboard/worker");
 
-  return {
-    success: true,
-    message: `Account submitted! Rs. ${currentRate} added to your pending balance.`
-  };
+  return { success: true, message: `Account submitted! $${currentRate} added to your pending balance.` };
 }
 
 export async function updateWorkerPaymentDetails(formData: FormData) {
   const worker = await requireWorker();
-
   const paymentDetails = sanitizeString(String(formData.get("paymentDetails") || ""), 500);
 
   if (!paymentDetails) {
     return { success: false, message: "Please enter your Bank or Binance payment details." };
   }
 
-  await prisma.user.update({
-    where: { id: worker.id },
-    data: { paymentDetails }
-  });
-
+  await prisma.user.update({ where: { id: worker.id }, data: { paymentDetails } });
   revalidatePath("/dashboard/worker");
 
   return { success: true, message: "Payment details saved successfully." };
@@ -80,7 +68,6 @@ export async function updateWorkerPaymentDetails(formData: FormData) {
 
 export async function requestPayout(formData: FormData) {
   const worker = await requireWorker();
-
   const amount = parseFloat(String(formData.get("amount") || "0"));
 
   if (isNaN(amount) || amount <= 0) {
@@ -92,9 +79,7 @@ export async function requestPayout(formData: FormData) {
     return { success: false, message: "Requested amount exceeds your available balance." };
   }
 
-  await prisma.payoutRequest.create({
-    data: { workerId: worker.id, amount }
-  });
+  await prisma.payoutRequest.create({ data: { workerId: worker.id, amount } });
 
   const admin = await prisma.user.findFirst({ where: { role: Role.ADMIN } });
   if (admin) {
@@ -103,35 +88,24 @@ export async function requestPayout(formData: FormData) {
         userId: admin.id,
         type: NotificationType.PAYOUT_REQUESTED,
         title: "New Payout Request",
-        message: `${freshWorker.displayId ?? freshWorker.name} requested a payout of Rs. ${amount.toFixed(2)}.`
+        message: `${freshWorker.displayId ?? freshWorker.name} requested a payout of $${amount.toFixed(2)}.`
       }
     });
   }
 
   revalidatePath("/dashboard/worker");
-
   return { success: true, message: "Payout request sent to admin." };
 }
 
 export async function markNotificationAsRead(notificationId: string) {
   const worker = await requireWorker();
-
-  await prisma.notification.update({
-    where: { id: notificationId, userId: worker.id },
-    data: { isRead: true }
-  });
-
+  await prisma.notification.update({ where: { id: notificationId, userId: worker.id }, data: { isRead: true } });
   revalidatePath("/dashboard/worker");
 }
 
 export async function markAllNotificationsAsRead() {
   const worker = await requireWorker();
-
-  await prisma.notification.updateMany({
-    where: { userId: worker.id, isRead: false },
-    data: { isRead: true }
-  });
-
+  await prisma.notification.updateMany({ where: { userId: worker.id, isRead: false }, data: { isRead: true } });
   revalidatePath("/dashboard/worker");
 }
 
@@ -141,36 +115,24 @@ export async function getWorkerDashboardData() {
   const [freshWorker, submissions, settings, notifications, referrals, payoutProofs, payoutRequests] =
     await Promise.all([
       prisma.user.findUnique({ where: { id: worker.id } }),
-      prisma.accountItem.findMany({
-        where: { workerId: worker.id },
-        orderBy: { createdAt: "desc" }
-      }),
+      prisma.accountItem.findMany({ where: { workerId: worker.id }, orderBy: { createdAt: "desc" } }),
       prisma.systemSettings.findUnique({ where: { id: "global" } }),
-      prisma.notification.findMany({
-        where: { userId: worker.id },
-        orderBy: { createdAt: "desc" },
-        take: 30
-      }),
+      prisma.notification.findMany({ where: { userId: worker.id }, orderBy: { createdAt: "desc" }, take: 30 }),
       prisma.user.findMany({
         where: { referredById: worker.id },
         select: { id: true, name: true, displayId: true, createdAt: true }
       }),
-      prisma.payoutProof.findMany({
-        where: { workerId: worker.id },
-        orderBy: { createdAt: "desc" }
-      }),
-      prisma.payoutRequest.findMany({
-        where: { workerId: worker.id },
-        orderBy: { createdAt: "desc" }
-      })
+      prisma.payoutProof.findMany({ where: { workerId: worker.id }, orderBy: { createdAt: "desc" } }),
+      prisma.payoutRequest.findMany({ where: { workerId: worker.id }, orderBy: { createdAt: "desc" } })
     ]);
 
+  const currentRate = await getRateForCountry(worker.country);
   const unreadCount = notifications.filter((n) => !n.isRead).length;
 
   return {
     worker: freshWorker,
     submissions,
-    currentRate: settings?.taskRate ?? 50,
+    currentRate,
     notifications,
     unreadCount,
     referrals,
