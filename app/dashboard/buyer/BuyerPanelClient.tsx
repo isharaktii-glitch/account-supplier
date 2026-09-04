@@ -277,7 +277,7 @@ export default function BuyerPanelClient({
               <h2 className="mb-4 text-lg font-semibold text-white">Submit Payment Proof</h2>
               <form ref={formRef} action={handleSubmit} className="space-y-4">
                 <div>
-                  <label className="mb-1.5 block text-sm font-medium text-slate-300">Amount Paid</label>
+                  <label className="mb-1.5 block text-sm font-medium text-slate-300">Amount Paid ($)</label>
                   <input type="number" name="amount" step="0.01" min="0" required className="glass-input" placeholder="0.00" />
                 </div>
                 <div>
@@ -319,7 +319,7 @@ export default function BuyerPanelClient({
                 {payments.map((p) => (
                   <div key={p.id} className="glass-panel p-4">
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <p className="font-semibold text-white">Rs. {p.amount.toFixed(2)}</p>
+                      <p className="font-semibold text-white">${p.amount.toFixed(2)}</p>
                       <span className={p.status === "APPROVED" ? "badge-approved" : p.status === "REJECTED" ? "badge-rejected" : "badge-pending"}>
                         {p.status}
                       </span>
