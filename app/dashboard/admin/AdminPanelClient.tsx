@@ -66,6 +66,8 @@ type Settings = { sriLankaRate: number; otherCountriesRate: number; referralComm
 type AccountStat = { status: string; _count: { status: number } };
 type AdminInfo = { id: string; paymentDetails: string | null } | null;
 
+type AdminTab = "buyers" | "workers" | "payments" | "payouts" | "announcements" | "settings";
+
 type AdminData = {
   admin: AdminInfo;
   pendingBuyers: Buyer[];
@@ -91,9 +93,7 @@ export default function AdminPanelClient({ initialData }: { initialData: AdminDa
   const [paymentDetailsMessage, setPaymentDetailsMessage] = useState<string | null>(null);
   const [countryRateMessage, setCountryRateMessage] = useState<string | null>(null);
   const [pauseMessage, setPauseMessage] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState
-    "buyers" | "workers" | "payments" | "payouts" | "announcements" | "settings"
-  >("buyers");
+  const [activeTab, setActiveTab] = useState<AdminTab>("buyers");
 
   const [rejectingPaymentId, setRejectingPaymentId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState("");
@@ -296,6 +296,8 @@ export default function AdminPanelClient({ initialData }: { initialData: AdminDa
   const soldCount = data.accountStats.find((s) => s.status === "SOLD")?._count.status ?? 0;
   const totalNotifications = data.pendingPaymentCount + data.pendingBuyerCount + data.pendingPayoutRequestCount;
 
+  const tabs: AdminTab[] = ["buyers", "workers", "payments", "payouts", "announcements", "settings"];
+
   return (
     <div>
       {totalNotifications > 0 && (
@@ -356,7 +358,7 @@ export default function AdminPanelClient({ initialData }: { initialData: AdminDa
       </div>
 
       <div className="mb-6 flex flex-wrap gap-2 border-b border-white/10 pb-4">
-        {(["buyers", "workers", "payments", "payouts", "announcements", "settings"] as const).map((t) => (
+        {tabs.map((t) => (
           <button
             key={t}
             onClick={() => setActiveTab(t)}
@@ -758,7 +760,7 @@ export default function AdminPanelClient({ initialData }: { initialData: AdminDa
                 className="glass-input"
                 onChange={(e) => {
                   const form = e.target.closest("form");
-                  const nameInput = form?.querySelector('input[name="countryName"]') as HTMLInputElement;
+                  const nameInput = form?.querySelector('input[name="countryName"]') as HTMLInputElement | null;
                   const selected = COUNTRIES.find((c) => c.code === e.target.value);
                   if (nameInput && selected) nameInput.value = selected.name;
                 }}
