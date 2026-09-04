@@ -4,7 +4,9 @@ import { useState, useTransition, useRef } from "react";
 import {
   submitPaymentProof,
   markBuyerNotificationAsRead,
-  markAllBuyerNotificationsAsRead
+  markAllBuyerNotificationsAsRead,
+  markAccountDone,
+  markAccountRejected
 } from "@/app/actions/buyerActions";
 
 type AccountItem = {
@@ -46,7 +48,7 @@ export default function BuyerPanelClient({
   initialNotifications: NotificationItem[];
   initialUnreadCount: number;
 }) {
-  const [accounts] = useState(initialAccounts);
+  const [accounts, setAccounts] = useState(initialAccounts);
   const [payments, setPayments] = useState(initialPayments);
   const [message, setMessage] = useState<string | null>(null);
   const [isError, setIsError] = useState(false);
@@ -57,6 +59,10 @@ export default function BuyerPanelClient({
   const [notifications, setNotifications] = useState(initialNotifications);
   const [unreadCount, setUnreadCount] = useState(initialUnreadCount);
   const [showNotifications, setShowNotifications] = useState(false);
+
+  const [rejectingAccountId, setRejectingAccountId] = useState<string | null>(null);
+  const [rejectReason, setRejectReason] = useState("");
+  const [accountActionMessage, setAccountActionMessage] = useState<string | null>(null);
 
   function handleSubmit(formData: FormData) {
     setMessage(null);
@@ -96,6 +102,39 @@ export default function BuyerPanelClient({
       await markAllBuyerNotificationsAsRead();
       setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
       setUnreadCount(0);
+    });
+  }
+
+  function handleMarkDone(id: string) {
+    setAccountActionMessage(null);
+    startTransition(async () => {
+      const result = await markAccountDone(id);
+      if (result) {
+        setAccountActionMessage(result.message);
+        if (result.success) {
+          setAccounts((prev) => prev.filter((a) => a.id !== id));
+        }
+      }
+    });
+  }
+
+  function openRejectModal(id: string) {
+    setRejectingAccountId(id);
+    setRejectReason("");
+  }
+
+  function submitRejectAccount() {
+    if (!rejectingAccountId || !rejectReason.trim()) return;
+    const fd = new FormData();
+    fd.set("reason", rejectReason.trim());
+
+    startTransition(async () => {
+      const result = await markAccountRejected(rejectingAccountId, fd);
+      if (result?.success) {
+        setAccounts((prev) => prev.filter((a) => a.id !== rejectingAccountId));
+        setRejectingAccountId(null);
+        setAccountActionMessage(result.message);
+      }
     });
   }
 
@@ -170,26 +209,46 @@ export default function BuyerPanelClient({
           <h2 className="mb-4 text-lg font-semibold text-white">
             Available Gmail Accounts ({accounts.length})
           </h2>
+
+          {accountActionMessage && (
+            <div className="mb-4 rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">
+              {accountActionMessage}
+            </div>
+          )}
+
           {accounts.length === 0 ? (
             <p className="glass-panel p-6 text-sm text-slate-400">
               No accounts available right now. Check back soon.
             </p>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="table-glass">
-                <thead>
-                  <tr><th>Gmail</th><th>Password</th><th>Listed</th></tr>
-                </thead>
-                <tbody>
-                  {accounts.map((a) => (
-                    <tr key={a.id}>
-                      <td className="font-mono text-sm">{a.gmail}</td>
-                      <td className="font-mono text-sm">{a.password}</td>
-                      <td>{new Date(a.createdAt).toLocaleDateString()}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="space-y-3">
+              {accounts.map((a) => (
+                <div key={a.id} className="glass-panel p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <p className="font-mono text-sm text-white">{a.gmail}</p>
+                      <p className="font-mono text-xs text-slate-400">{a.password}</p>
+                      <p className="mt-1 text-xs text-slate-500">{new Date(a.createdAt).toLocaleDateString()}</p>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        disabled={isPending}
+                        onClick={() => handleMarkDone(a.id)}
+                        className="btn-primary !px-4 !py-2 text-sm"
+                      >
+                        Mark as Done
+                      </button>
+                      <button
+                        disabled={isPending}
+                        onClick={() => openRejectModal(a.id)}
+                        className="btn-secondary !px-4 !py-2 text-sm hover:!border-rose-400 hover:!text-rose-400"
+                      >
+                        Reject
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </div>
@@ -275,6 +334,34 @@ export default function BuyerPanelClient({
                 ))}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {rejectingAccountId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-6">
+          <div className="glass-panel w-full max-w-md p-6">
+            <h3 className="mb-3 text-lg font-semibold text-white">Reject Account</h3>
+            <label className="mb-1.5 block text-sm font-medium text-slate-300">Rejection Reason</label>
+            <textarea
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+              rows={4}
+              className="glass-input resize-none"
+              placeholder="e.g. Password does not work / account is locked."
+            />
+            <div className="mt-4 flex gap-3">
+              <button onClick={() => setRejectingAccountId(null)} className="btn-secondary flex-1">
+                Cancel
+              </button>
+              <button
+                onClick={submitRejectAccount}
+                disabled={isPending || !rejectReason.trim()}
+                className="btn-primary flex-1"
+              >
+                {isPending ? "Rejecting..." : "Confirm Reject"}
+              </button>
+            </div>
           </div>
         </div>
       )}
