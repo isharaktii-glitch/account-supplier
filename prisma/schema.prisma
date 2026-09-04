@@ -25,11 +25,18 @@ enum PaymentStatus {
   REJECTED
 }
 
+enum PayoutRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 enum NotificationType {
   PAYMENT_RECEIVED
   ACCOUNT_SOLD
   ACCOUNT_REJECTED
   ANNOUNCEMENT
+  PAYOUT_REQUESTED
 }
 
 model User {
@@ -39,22 +46,19 @@ model User {
   name        String
   role        Role
 
-  // Worker-specific fields
-  workerCode  String?  @unique   // legacy simple code (kept for backward compatibility)
-  displayId   String?  @unique   // e.g. "HH-001" or "HH-001/PS"
-  initials    String?            // e.g. "HH"
+  workerCode  String?  @unique
+  displayId   String?  @unique
+  initials    String?
   balance     Float    @default(0)
+  pendingBalance Float @default(0)
 
-  // Referral system
-  referralCode String?  @unique  // short shareable code used in the referral link
+  referralCode String?  @unique
   referredById String?
   referredBy   User?    @relation("ReferralChain", fields: [referredById], references: [id])
   referrals    User[]   @relation("ReferralChain")
 
-  // Buyer-specific fields
   isApproved  Boolean  @default(false)
 
-  // Payment receiving details (Worker: where Admin pays them / Admin: where Buyers pay them)
   paymentDetails String? @db.Text
 
   createdAt   DateTime @default(now())
@@ -64,6 +68,7 @@ model User {
   paymentRequests   PaymentRequest[]  @relation("BuyerPayments")
   notifications     Notification[]    @relation("UserNotifications")
   payoutProofs      PayoutProof[]     @relation("WorkerPayoutProofs")
+  payoutRequests    PayoutRequest[]   @relation("WorkerPayoutRequests")
 
   @@index([role])
   @@index([referredById])
@@ -118,6 +123,21 @@ model PayoutProof {
   @@index([workerId])
 }
 
+model PayoutRequest {
+  id        String               @id @default(cuid())
+  amount    Float
+  status    PayoutRequestStatus  @default(PENDING)
+
+  worker    User                 @relation("WorkerPayoutRequests", fields: [workerId], references: [id])
+  workerId  String
+
+  createdAt DateTime             @default(now())
+  updatedAt DateTime             @updatedAt
+
+  @@index([workerId])
+  @@index([status])
+}
+
 model Notification {
   id        String            @id @default(cuid())
   type      NotificationType
@@ -139,5 +159,6 @@ model SystemSettings {
   taskRate            Float  @default(50)
   referralCommission  Float  @default(10)
   directJoinCounter   Int    @default(0)
+  isSystemPaused      Boolean @default(false)
   updatedAt           DateTime @updatedAt
 }
