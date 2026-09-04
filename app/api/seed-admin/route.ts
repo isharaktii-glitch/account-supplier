@@ -7,7 +7,6 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const key = searchParams.get("key");
 
-  // Simple protection: require SESSION_SECRET as a query param so random visitors can't trigger this
   if (!key || key !== process.env.SESSION_SECRET) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -47,7 +46,7 @@ export async function GET(request: Request) {
   const settings = await prisma.systemSettings.findUnique({ where: { id: "global" } });
   if (!settings) {
     await prisma.systemSettings.create({
-      data: { id: "global", taskRate: 50, referralCommission: 10 }
+      data: { id: "global", sriLankaRate: 50, otherCountriesRate: 30, referralCommission: 10 }
     });
   }
 
