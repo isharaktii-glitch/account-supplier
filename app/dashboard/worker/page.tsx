@@ -19,6 +19,14 @@ export default async function WorkerDashboardPage({
       <Navbar />
       <div className="px-6 py-10">
         <div className="mx-auto max-w-6xl">
+          {!data.worker?.country && (
+            <div className="mb-6 rounded-xl border border-rose-400/40 bg-rose-500/10 px-5 py-4">
+              <p className="text-sm font-semibold text-rose-300">
+                ⚠️ Please select your country to continue receiving accurate task rates.
+              </p>
+            </div>
+          )}
+
           {data.isSystemPaused && (
             <div className="mb-6 rounded-xl border border-amber-400/40 bg-amber-500/10 px-5 py-4 text-sm font-semibold text-amber-200">
               ⚠️ The system is currently paused by the admin. Account submissions are temporarily disabled.
@@ -44,7 +52,7 @@ export default async function WorkerDashboardPage({
           <WorkerPanelClient
             initialWorker={JSON.parse(JSON.stringify(data.worker))}
             initialSubmissions={JSON.parse(JSON.stringify(data.submissions))}
-            currentRate={data.currentRate}
+            rateInfo={data.rateInfo}
             initialNotifications={JSON.parse(JSON.stringify(data.notifications))}
             initialUnreadCount={data.unreadCount}
             referrals={JSON.parse(JSON.stringify(data.referrals))}
