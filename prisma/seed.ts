@@ -44,7 +44,7 @@ async function main() {
 
   if (!settings) {
     await prisma.systemSettings.create({
-      data: { id: "global", taskRate: 50, referralCommission: 10 }
+      data: { id: "global", sriLankaRate: 50, otherCountriesRate: 30, referralCommission: 10 }
     });
     console.log("Default system settings created.");
   }
