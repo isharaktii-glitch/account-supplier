@@ -62,7 +62,13 @@ type PayoutRequestItem = {
 
 type CountryRateItem = { id: string; countryCode: string; countryName: string; rate: number };
 
-type Settings = { sriLankaRate: number; otherCountriesRate: number; referralCommission: number } | null;
+type Settings = {
+  sriLankaRate: number;
+  exchangeRate: number;
+  otherCountriesRate: number;
+  referralCommission: number;
+} | null;
+
 type AccountStat = { status: string; _count: { status: number } };
 type AdminInfo = { id: string; paymentDetails: string | null } | null;
 
@@ -208,9 +214,13 @@ export default function AdminPanelClient({ initialData }: { initialData: AdminDa
         setRateMessage(result.message);
         if (result.success) {
           const sriLankaRate = parseFloat(String(formData.get("sriLankaRate") || "0"));
-          const otherCountriesRate = parseFloat(String(formData.get("otherCountriesRate") || "0"));
+          const exchangeRate = parseFloat(String(formData.get("exchangeRate") || "0"));
           const referralCommission = parseFloat(String(formData.get("referralCommission") || "0"));
-          setData((prev) => ({ ...prev, settings: { sriLankaRate, otherCountriesRate, referralCommission } }));
+          const otherCountriesRate = sriLankaRate / exchangeRate;
+          setData((prev) => ({
+            ...prev,
+            settings: { sriLankaRate, exchangeRate, otherCountriesRate, referralCommission }
+          }));
         }
       }
     });
@@ -468,8 +478,12 @@ export default function AdminPanelClient({ initialData }: { initialData: AdminDa
                       <p className="text-sm text-slate-400">{w.email} • {w.country ?? "Unknown"}</p>
                     </div>
                     <div className="text-right">
-                      <p className="font-semibold text-emerald-400">${w.balance.toFixed(2)}</p>
-                      <p className="text-xs text-amber-400">Pending: ${w.pendingBalance.toFixed(2)}</p>
+                      <p className="font-semibold text-emerald-400">
+                        {w.country === "LK" ? "Rs. " : "$"}{w.balance.toFixed(2)}
+                      </p>
+                      <p className="text-xs text-amber-400">
+                        Pending: {w.country === "LK" ? "Rs. " : "$"}{w.pendingBalance.toFixed(2)}
+                      </p>
                     </div>
                   </div>
                   <div className="mt-3 flex items-center justify-between gap-3">
@@ -726,12 +740,19 @@ export default function AdminPanelClient({ initialData }: { initialData: AdminDa
             <h2 className="mb-4 text-lg font-semibold text-white">Default Rate Settings</h2>
             <form action={handleRateUpdate} className="space-y-4">
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-slate-300">Sri Lanka Rate ($)</label>
+                <label className="mb-1.5 block text-sm font-medium text-slate-300">Sri Lanka Rate (Rs.)</label>
                 <input type="number" name="sriLankaRate" step="0.01" min="0" required defaultValue={data.settings?.sriLankaRate ?? 50} className="glass-input" />
               </div>
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-slate-300">Other Countries Rate ($)</label>
-                <input type="number" name="otherCountriesRate" step="0.01" min="0" required defaultValue={data.settings?.otherCountriesRate ?? 30} className="glass-input" />
+                <label className="mb-1.5 block text-sm font-medium text-slate-300">Exchange Rate (1 USD = ___ LKR)</label>
+                <input type="number" name="exchangeRate" step="0.01" min="1" required defaultValue={data.settings?.exchangeRate ?? 300} className="glass-input" />
+                <p className="mt-1 text-[11px] text-slate-500">
+                  Used to auto-calculate the USD rate for other countries from the Sri Lanka rate.
+                </p>
+              </div>
+              <div className="rounded-lg border border-galaxy-accent2/30 bg-galaxy-accent2/10 p-3 text-sm text-galaxy-accent2">
+                Auto-calculated rate for other countries: $
+                {data.settings ? (data.settings.sriLankaRate / data.settings.exchangeRate).toFixed(2) : "0.00"}
               </div>
               <div>
                 <label className="mb-1.5 block text-sm font-medium text-slate-300">Referral Commission (%)</label>
@@ -751,7 +772,7 @@ export default function AdminPanelClient({ initialData }: { initialData: AdminDa
           <section className="glass-panel p-6">
             <h2 className="mb-1 text-lg font-semibold text-white">Country-Specific Rate Override</h2>
             <p className="mb-4 text-xs text-slate-400">
-              Set a custom rate for a specific country. Overrides the default rates above.
+              Set a custom rate for a specific country (Sri Lanka uses Rs., all others use $).
             </p>
             <form action={handleSetCountryRate} className="space-y-4">
               <select
@@ -771,7 +792,7 @@ export default function AdminPanelClient({ initialData }: { initialData: AdminDa
                 ))}
               </select>
               <input type="hidden" name="countryName" />
-              <input type="number" name="rate" step="0.01" min="0" required className="glass-input" placeholder="Custom rate ($)" />
+              <input type="number" name="rate" step="0.01" min="0" required className="glass-input" placeholder="Custom rate (Rs. for Sri Lanka, $ for others)" />
 
               {countryRateMessage && (
                 <div className="rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">
@@ -790,7 +811,9 @@ export default function AdminPanelClient({ initialData }: { initialData: AdminDa
                   <div key={c.id} className="flex items-center justify-between rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm">
                     <span className="text-white">{c.countryName}</span>
                     <div className="flex items-center gap-3">
-                      <span className="text-galaxy-accent2">${c.rate.toFixed(2)}</span>
+                      <span className="text-galaxy-accent2">
+                        {c.countryCode === "LK" ? "Rs. " : "$"}{c.rate.toFixed(2)}
+                      </span>
                       <button onClick={() => handleDeleteCountryRate(c.countryCode)} className="text-xs text-rose-400 hover:underline">
                         Remove
                       </button>
@@ -869,4 +892,4 @@ export default function AdminPanelClient({ initialData }: { initialData: AdminDa
       )}
     </div>
   );
-}
+          }
