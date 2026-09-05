@@ -3,7 +3,7 @@
 import { useState, useTransition, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { registerWorker, registerBuyer } from "@/app/actions/authActions";
-import { COUNTRIES } from "@/lib/countries";
+import CountrySelect from "@/components/CountrySelect";
 import Link from "next/link";
 
 type Tab = "worker" | "buyer";
@@ -89,12 +89,7 @@ export default function RegisterPage() {
 
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-300">Country</label>
-            <select name="country" required className="glass-input">
-              <option value="">Select your country...</option>
-              {COUNTRIES.map((c) => (
-                <option key={c.code} value={c.code}>{c.name}</option>
-              ))}
-            </select>
+            <CountrySelect name="country" required />
           </div>
 
           <div>
