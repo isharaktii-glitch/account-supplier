@@ -4,10 +4,13 @@ import { useState, useTransition, useRef } from "react";
 import {
   submitGmailAccount,
   updateWorkerPaymentDetails,
+  updateWorkerCountry,
   markNotificationAsRead,
   markAllNotificationsAsRead,
   requestPayout
 } from "@/app/actions/workerActions";
+import CountrySelect from "@/components/CountrySelect";
+import { formatRate, type RateInfo } from "@/lib/rates";
 
 type Worker = {
   id: string;
@@ -45,7 +48,7 @@ type PayoutRequestItem = { id: string; amount: number; status: string; createdAt
 type WorkerPanelClientProps = {
   initialWorker: Worker;
   initialSubmissions: Submission[];
-  currentRate: number;
+  rateInfo: RateInfo;
   initialNotifications: NotificationItem[];
   initialUnreadCount: number;
   referrals: Referral[];
@@ -58,7 +61,7 @@ type WorkerPanelClientProps = {
 export default function WorkerPanelClient({
   initialWorker,
   initialSubmissions,
-  currentRate,
+  rateInfo,
   initialNotifications,
   initialUnreadCount,
   referrals,
@@ -77,6 +80,9 @@ export default function WorkerPanelClient({
   const [paymentMessage, setPaymentMessage] = useState<string | null>(null);
   const [paymentIsError, setPaymentIsError] = useState(false);
   const [isPaymentPending, startPaymentTransition] = useTransition();
+
+  const [countryMessage, setCountryMessage] = useState<string | null>(null);
+  const [isCountryPending, startCountryTransition] = useTransition();
 
   const [notifications, setNotifications] = useState(initialNotifications);
   const [unreadCount, setUnreadCount] = useState(initialUnreadCount);
@@ -106,13 +112,13 @@ export default function WorkerPanelClient({
 
         if (result.success) {
           formRef.current?.reset();
-          setWorker((prev) => (prev ? { ...prev, pendingBalance: prev.pendingBalance + currentRate } : prev));
+          setWorker((prev) => (prev ? { ...prev, pendingBalance: prev.pendingBalance + rateInfo.amount } : prev));
           setSubmissions((prev) => [
             {
               id: `temp-${Date.now()}`,
               gmail: String(formData.get("gmail")),
               status: "AVAILABLE",
-              rateAtEntry: currentRate,
+              rateAtEntry: rateInfo.amount,
               rejectionReason: null,
               createdAt: new Date().toISOString()
             },
@@ -132,6 +138,20 @@ export default function WorkerPanelClient({
         setPaymentMessage(result.message);
         if (result.success) {
           setWorker((prev) => (prev ? { ...prev, paymentDetails: String(formData.get("paymentDetails")) } : prev));
+        }
+      }
+    });
+  }
+
+  function handleCountryUpdate(formData: FormData) {
+    setCountryMessage(null);
+    startCountryTransition(async () => {
+      const result = await updateWorkerCountry(formData);
+      if (result) {
+        setCountryMessage(result.message);
+        if (result.success) {
+          setWorker((prev) => (prev ? { ...prev, country: String(formData.get("country")) } : prev));
+          setTimeout(() => window.location.reload(), 1000);
         }
       }
     });
@@ -182,6 +202,28 @@ export default function WorkerPanelClient({
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     }
+  }
+
+  if (!worker?.country) {
+    return (
+      <div className="glass-panel mx-auto max-w-md p-8 text-center">
+        <h2 className="mb-2 text-xl font-bold text-white">Select Your Country</h2>
+        <p className="mb-6 text-sm text-slate-400">
+          We need your country to show you the correct task rate.
+        </p>
+        <form action={handleCountryUpdate} className="space-y-4">
+          <CountrySelect name="country" required />
+          {countryMessage && (
+            <div className="rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">
+              {countryMessage}
+            </div>
+          )}
+          <button type="submit" disabled={isCountryPending} className="btn-primary w-full">
+            {isCountryPending ? "Saving..." : "Save Country"}
+          </button>
+        </form>
+      </div>
+    );
   }
 
   return (
@@ -252,15 +294,19 @@ export default function WorkerPanelClient({
 
       <div className="mb-8 grid grid-cols-2 gap-4 sm:grid-cols-4">
         <div className="glass-card !p-4 text-center">
-          <p className="text-2xl font-bold text-emerald-400">${worker?.balance.toFixed(2) ?? "0.00"}</p>
+          <p className="text-2xl font-bold text-emerald-400">
+            {rateInfo.currency === "LKR" ? "Rs." : "$"}{worker?.balance.toFixed(2) ?? "0.00"}
+          </p>
           <p className="text-xs text-slate-400">Confirmed Balance</p>
         </div>
         <div className="glass-card !p-4 text-center">
-          <p className="text-2xl font-bold text-amber-400">${worker?.pendingBalance.toFixed(2) ?? "0.00"}</p>
+          <p className="text-2xl font-bold text-amber-400">
+            {rateInfo.currency === "LKR" ? "Rs." : "$"}{worker?.pendingBalance.toFixed(2) ?? "0.00"}
+          </p>
           <p className="text-xs text-slate-400">Pending Balance</p>
         </div>
         <div className="glass-card !p-4 text-center">
-          <p className="text-2xl font-bold text-galaxy-accent2">${currentRate.toFixed(2)}</p>
+          <p className="text-2xl font-bold text-galaxy-accent2">{formatRate(rateInfo)}</p>
           <p className="text-xs text-slate-400">Your Task Rate</p>
         </div>
         <div className="glass-card !p-4 text-center">
@@ -320,7 +366,7 @@ export default function WorkerPanelClient({
                       </span>
                     </div>
                     <div className="mt-1 flex items-center justify-between text-xs text-slate-400">
-                      <span>Rate: ${s.rateAtEntry.toFixed(2)}</span>
+                      <span>Rate: {rateInfo.currency === "LKR" ? "Rs." : "$"}{s.rateAtEntry.toFixed(2)}</span>
                       <span>{new Date(s.createdAt).toLocaleDateString()}</span>
                     </div>
                     {s.status === "REJECTED" && s.rejectionReason && (
@@ -386,7 +432,7 @@ export default function WorkerPanelClient({
             <div className="glass-panel p-6">
               <h2 className="mb-1 text-lg font-semibold text-white">Request Payout</h2>
               <p className="mb-4 text-xs text-slate-400">
-                Request part or all of your confirmed balance (${worker?.balance.toFixed(2) ?? "0.00"}).
+                Request part or all of your confirmed balance ({rateInfo.currency === "LKR" ? "Rs." : "$"}{worker?.balance.toFixed(2) ?? "0.00"}).
               </p>
               <form ref={payoutFormRef} action={handlePayoutRequest} className="space-y-4">
                 <input type="number" name="amount" step="0.01" min="0" required className="glass-input" placeholder="Amount to request" />
@@ -409,7 +455,7 @@ export default function WorkerPanelClient({
                 <div className="space-y-2">
                   {payoutRequestList.map((r) => (
                     <div key={r.id} className="glass-panel flex items-center justify-between p-3">
-                      <p className="text-sm text-white">${r.amount.toFixed(2)}</p>
+                      <p className="text-sm text-white">{rateInfo.currency === "LKR" ? "Rs." : "$"}{r.amount.toFixed(2)}</p>
                       <span className={r.status === "APPROVED" ? "badge-approved" : r.status === "REJECTED" ? "badge-rejected" : "badge-pending"}>
                         {r.status}
                       </span>
@@ -429,7 +475,7 @@ export default function WorkerPanelClient({
                 {payoutProofs.map((p) => (
                   <div key={p.id} className="glass-panel flex flex-wrap items-center justify-between gap-3 p-4">
                     <div>
-                      <p className="font-semibold text-emerald-400">${p.amount.toFixed(2)}</p>
+                      <p className="font-semibold text-emerald-400">{rateInfo.currency === "LKR" ? "Rs." : "$"}{p.amount.toFixed(2)}</p>
                       {p.note && <p className="text-xs text-slate-400">{p.note}</p>}
                       <p className="text-xs text-slate-500">{new Date(p.createdAt).toLocaleDateString()}</p>
                     </div>
