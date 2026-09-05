@@ -145,6 +145,7 @@ model CountryRate {
   countryCode String   @unique
   countryName String
   rate        Float
+  currency    String   @default("USD")
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -169,6 +170,7 @@ model Notification {
 model SystemSettings {
   id                  String @id @default("global")
   sriLankaRate        Float  @default(50)
+  exchangeRate        Float  @default(300)
   otherCountriesRate  Float  @default(30)
   referralCommission  Float  @default(10)
   directJoinCounter   Int    @default(0)
