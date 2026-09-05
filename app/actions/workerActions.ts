@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
 import { Role, NotificationType } from "@prisma/client";
 import { sanitizeString, isValidEmail } from "@/lib/validation";
-import { getRateForCountry } from "@/lib/rates";
+import { getRateForCountry, formatRate } from "@/lib/rates";
 import { revalidatePath } from "next/cache";
 
 async function requireWorker() {
@@ -35,21 +35,21 @@ export async function submitGmailAccount(formData: FormData) {
     return { success: false, message: "This Gmail account has already been submitted before." };
   }
 
-  const currentRate = await getRateForCountry(worker.country);
+  const rateInfo = await getRateForCountry(worker.country);
 
   await prisma.$transaction([
     prisma.accountItem.create({
-      data: { gmail, password: accountPassword, workerId: worker.id, rateAtEntry: currentRate }
+      data: { gmail, password: accountPassword, workerId: worker.id, rateAtEntry: rateInfo.amount }
     }),
     prisma.user.update({
       where: { id: worker.id },
-      data: { pendingBalance: { increment: currentRate } }
+      data: { pendingBalance: { increment: rateInfo.amount } }
     })
   ]);
 
   revalidatePath("/dashboard/worker");
 
-  return { success: true, message: `Account submitted! $${currentRate} added to your pending balance.` };
+  return { success: true, message: `Account submitted! ${formatRate(rateInfo)} added to your pending balance.` };
 }
 
 export async function updateWorkerPaymentDetails(formData: FormData) {
@@ -64,6 +64,20 @@ export async function updateWorkerPaymentDetails(formData: FormData) {
   revalidatePath("/dashboard/worker");
 
   return { success: true, message: "Payment details saved successfully." };
+}
+
+export async function updateWorkerCountry(formData: FormData) {
+  const worker = await requireWorker();
+  const country = String(formData.get("country") || "");
+
+  if (!country) {
+    return { success: false, message: "Please select your country." };
+  }
+
+  await prisma.user.update({ where: { id: worker.id }, data: { country } });
+  revalidatePath("/dashboard/worker");
+
+  return { success: true, message: "Country updated successfully." };
 }
 
 export async function requestPayout(formData: FormData) {
@@ -126,13 +140,13 @@ export async function getWorkerDashboardData() {
       prisma.payoutRequest.findMany({ where: { workerId: worker.id }, orderBy: { createdAt: "desc" } })
     ]);
 
-  const currentRate = await getRateForCountry(worker.country);
+  const rateInfo = await getRateForCountry(worker.country);
   const unreadCount = notifications.filter((n) => !n.isRead).length;
 
   return {
     worker: freshWorker,
     submissions,
-    currentRate,
+    rateInfo,
     notifications,
     unreadCount,
     referrals,
