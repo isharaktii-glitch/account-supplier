@@ -10,7 +10,13 @@ import {
   requestPayout
 } from "@/app/actions/workerActions";
 import CountrySelect from "@/components/CountrySelect";
-import { formatRate, type RateInfo } from "@/lib/rates";
+import { formatRate, type RateInfo } from "@/lib/rateFormat";
+import {
+  ACCOUNT_TYPES,
+  ACCOUNT_TYPE_LABELS,
+  ACCOUNT_TYPE_PLACEHOLDERS,
+  type AccountTypeKey
+} from "@/lib/accountTypes";
 
 type Worker = {
   id: string;
@@ -26,6 +32,7 @@ type Worker = {
 type Submission = {
   id: string;
   gmail: string;
+  type: string;
   status: string;
   rateAtEntry: number;
   rejectionReason: string | null;
@@ -49,6 +56,7 @@ type WorkerPanelClientProps = {
   initialWorker: Worker;
   initialSubmissions: Submission[];
   rateInfo: RateInfo;
+  typeRates: Record<string, RateInfo>;
   initialNotifications: NotificationItem[];
   initialUnreadCount: number;
   referrals: Referral[];
@@ -62,6 +70,7 @@ export default function WorkerPanelClient({
   initialWorker,
   initialSubmissions,
   rateInfo,
+  typeRates,
   initialNotifications,
   initialUnreadCount,
   referrals,
@@ -76,6 +85,7 @@ export default function WorkerPanelClient({
   const [isError, setIsError] = useState(false);
   const [isPending, startTransition] = useTransition();
   const formRef = useRef<HTMLFormElement>(null);
+  const [selectedType, setSelectedType] = useState<AccountTypeKey>("GMAIL");
 
   const [paymentMessage, setPaymentMessage] = useState<string | null>(null);
   const [paymentIsError, setPaymentIsError] = useState(false);
@@ -97,6 +107,9 @@ export default function WorkerPanelClient({
   const [isPayoutPending, startPayoutTransition] = useTransition();
   const payoutFormRef = useRef<HTMLFormElement>(null);
 
+  const symbol = rateInfo.currency === "LKR" ? "Rs." : "$";
+  const selectedRate = typeRates[selectedType] ?? rateInfo;
+
   const referralLink =
     typeof window !== "undefined" && worker?.referralCode
       ? `${window.location.origin}/register?ref=${worker.referralCode}`
@@ -104,6 +117,9 @@ export default function WorkerPanelClient({
 
   function handleSubmit(formData: FormData) {
     setMessage(null);
+    const submittedType = selectedType;
+    const submittedRate = typeRates[submittedType] ?? rateInfo;
+
     startTransition(async () => {
       const result = await submitGmailAccount(formData);
       if (result) {
@@ -112,13 +128,17 @@ export default function WorkerPanelClient({
 
         if (result.success) {
           formRef.current?.reset();
-          setWorker((prev) => (prev ? { ...prev, pendingBalance: prev.pendingBalance + rateInfo.amount } : prev));
+          setSelectedType("GMAIL");
+          setWorker((prev) =>
+            prev ? { ...prev, pendingBalance: prev.pendingBalance + submittedRate.amount } : prev
+          );
           setSubmissions((prev) => [
             {
               id: `temp-${Date.now()}`,
               gmail: String(formData.get("gmail")),
+              type: submittedType,
               status: "AVAILABLE",
-              rateAtEntry: rateInfo.amount,
+              rateAtEntry: submittedRate.amount,
               rejectionReason: null,
               createdAt: new Date().toISOString()
             },
@@ -295,19 +315,19 @@ export default function WorkerPanelClient({
       <div className="mb-8 grid grid-cols-2 gap-4 sm:grid-cols-4">
         <div className="glass-card !p-4 text-center">
           <p className="text-2xl font-bold text-emerald-400">
-            {rateInfo.currency === "LKR" ? "Rs." : "$"}{worker?.balance.toFixed(2) ?? "0.00"}
+            {symbol}{worker?.balance.toFixed(2) ?? "0.00"}
           </p>
           <p className="text-xs text-slate-400">Confirmed Balance</p>
         </div>
         <div className="glass-card !p-4 text-center">
           <p className="text-2xl font-bold text-amber-400">
-            {rateInfo.currency === "LKR" ? "Rs." : "$"}{worker?.pendingBalance.toFixed(2) ?? "0.00"}
+            {symbol}{worker?.pendingBalance.toFixed(2) ?? "0.00"}
           </p>
           <p className="text-xs text-slate-400">Pending Balance</p>
         </div>
         <div className="glass-card !p-4 text-center">
           <p className="text-2xl font-bold text-galaxy-accent2">{formatRate(rateInfo)}</p>
-          <p className="text-xs text-slate-400">Your Task Rate</p>
+          <p className="text-xs text-slate-400">Gmail Task Rate</p>
         </div>
         <div className="glass-card !p-4 text-center">
           <p className="text-2xl font-bold text-galaxy-glow">{referrals.length}</p>
@@ -319,7 +339,7 @@ export default function WorkerPanelClient({
         <div className="grid gap-6 lg:grid-cols-3">
           <div className="lg:col-span-1">
             <div className="glass-panel p-6">
-              <h2 className="mb-4 text-lg font-semibold text-white">Submit Gmail Account</h2>
+              <h2 className="mb-4 text-lg font-semibold text-white">Submit Email Account</h2>
               {isSystemPaused ? (
                 <p className="rounded-lg border border-amber-400/30 bg-amber-500/10 p-3 text-xs text-amber-300">
                   Submissions are currently paused by the admin.
@@ -327,8 +347,30 @@ export default function WorkerPanelClient({
               ) : (
                 <form ref={formRef} action={handleSubmit} className="space-y-4">
                   <div>
-                    <label className="mb-1.5 block text-sm font-medium text-slate-300">Gmail Address</label>
-                    <input type="email" name="gmail" required className="glass-input" placeholder="example@gmail.com" />
+                    <label className="mb-1.5 block text-sm font-medium text-slate-300">Account Type</label>
+                    <select
+                      name="type"
+                      value={selectedType}
+                      onChange={(e) => setSelectedType(e.target.value as AccountTypeKey)}
+                      className="glass-input"
+                    >
+                      {ACCOUNT_TYPES.map((t) => (
+                        <option key={t} value={t}>{ACCOUNT_TYPE_LABELS[t]}</option>
+                      ))}
+                    </select>
+                    <p className="mt-1 text-[11px] text-galaxy-accent2">
+                      Rate for {ACCOUNT_TYPE_LABELS[selectedType]}: {formatRate(selectedRate)} per account
+                    </p>
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium text-slate-300">Email Address</label>
+                    <input
+                      type="email"
+                      name="gmail"
+                      required
+                      className="glass-input"
+                      placeholder={ACCOUNT_TYPE_PLACEHOLDERS[selectedType]}
+                    />
                   </div>
                   <div>
                     <label className="mb-1.5 block text-sm font-medium text-slate-300">Account Password</label>
@@ -360,13 +402,18 @@ export default function WorkerPanelClient({
                 {submissions.map((s) => (
                   <div key={s.id} className="glass-panel p-4">
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <p className="font-mono text-sm text-white">{s.gmail}</p>
+                      <div>
+                        <p className="font-mono text-sm text-white">{s.gmail}</p>
+                        <p className="text-[11px] text-galaxy-accent2">
+                          {ACCOUNT_TYPE_LABELS[s.type as AccountTypeKey] ?? s.type}
+                        </p>
+                      </div>
                       <span className={s.status === "SOLD" ? "badge-approved" : s.status === "REJECTED" ? "badge-rejected" : "badge-pending"}>
                         {s.status}
                       </span>
                     </div>
                     <div className="mt-1 flex items-center justify-between text-xs text-slate-400">
-                      <span>Rate: {rateInfo.currency === "LKR" ? "Rs." : "$"}{s.rateAtEntry.toFixed(2)}</span>
+                      <span>Rate: {symbol}{s.rateAtEntry.toFixed(2)}</span>
                       <span>{new Date(s.createdAt).toLocaleDateString()}</span>
                     </div>
                     {s.status === "REJECTED" && s.rejectionReason && (
@@ -432,7 +479,7 @@ export default function WorkerPanelClient({
             <div className="glass-panel p-6">
               <h2 className="mb-1 text-lg font-semibold text-white">Request Payout</h2>
               <p className="mb-4 text-xs text-slate-400">
-                Request part or all of your confirmed balance ({rateInfo.currency === "LKR" ? "Rs." : "$"}{worker?.balance.toFixed(2) ?? "0.00"}).
+                Request part or all of your confirmed balance ({symbol}{worker?.balance.toFixed(2) ?? "0.00"}).
               </p>
               <form ref={payoutFormRef} action={handlePayoutRequest} className="space-y-4">
                 <input type="number" name="amount" step="0.01" min="0" required className="glass-input" placeholder="Amount to request" />
@@ -455,7 +502,7 @@ export default function WorkerPanelClient({
                 <div className="space-y-2">
                   {payoutRequestList.map((r) => (
                     <div key={r.id} className="glass-panel flex items-center justify-between p-3">
-                      <p className="text-sm text-white">{rateInfo.currency === "LKR" ? "Rs." : "$"}{r.amount.toFixed(2)}</p>
+                      <p className="text-sm text-white">{symbol}{r.amount.toFixed(2)}</p>
                       <span className={r.status === "APPROVED" ? "badge-approved" : r.status === "REJECTED" ? "badge-rejected" : "badge-pending"}>
                         {r.status}
                       </span>
@@ -475,7 +522,7 @@ export default function WorkerPanelClient({
                 {payoutProofs.map((p) => (
                   <div key={p.id} className="glass-panel flex flex-wrap items-center justify-between gap-3 p-4">
                     <div>
-                      <p className="font-semibold text-emerald-400">{rateInfo.currency === "LKR" ? "Rs." : "$"}{p.amount.toFixed(2)}</p>
+                      <p className="font-semibold text-emerald-400">{symbol}{p.amount.toFixed(2)}</p>
                       {p.note && <p className="text-xs text-slate-400">{p.note}</p>}
                       <p className="text-xs text-slate-500">{new Date(p.createdAt).toLocaleDateString()}</p>
                     </div>
