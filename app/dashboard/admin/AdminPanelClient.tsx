@@ -19,7 +19,14 @@ import {
 } from "@/app/actions/adminActions";
 import { COUNTRIES } from "@/lib/countries";
 
-type Buyer = { id: string; name: string; email: string; country: string | null; createdAt: string };
+type Buyer = {
+  id: string;
+  name: string;
+  email: string;
+  country: string | null;
+  buyerType?: string | null;
+  createdAt: string;
+};
 
 type Worker = {
   id: string;
@@ -60,7 +67,12 @@ type PayoutRequestItem = {
   worker: { name: string; displayId: string | null; balance: number };
 };
 
-type CountryRateItem = { id: string; countryCode: string; countryName: string; rate: number };
+type CountryRateItem = {
+  id: string;
+  countryCode: string;
+  countryName: string;
+  rate: number;
+};
 
 type Settings = {
   sriLankaRate: number;
@@ -69,10 +81,23 @@ type Settings = {
   referralCommission: number;
 } | null;
 
-type AccountStat = { status: string; _count: { status: number } };
-type AdminInfo = { id: string; paymentDetails: string | null } | null;
+type AccountStat = {
+  status: string;
+  _count: { status: number };
+};
 
-type AdminTab = "buyers" | "workers" | "payments" | "payouts" | "announcements" | "settings";
+type AdminInfo = {
+  id: string;
+  paymentDetails: string | null;
+} | null;
+
+type AdminTab =
+  | "buyers"
+  | "workers"
+  | "payments"
+  | "payouts"
+  | "announcements"
+  | "settings";
 
 type AdminData = {
   admin: AdminInfo;
@@ -92,30 +117,47 @@ type AdminData = {
   isSystemPaused: boolean;
 };
 
-export default function AdminPanelClient({ initialData }: { initialData: AdminData }) {
+export default function AdminPanelClient({
+  initialData
+}: {
+  initialData: AdminData;
+}) {
   const [data, setData] = useState(initialData);
   const [isPending, startTransition] = useTransition();
+
   const [rateMessage, setRateMessage] = useState<string | null>(null);
-  const [paymentDetailsMessage, setPaymentDetailsMessage] = useState<string | null>(null);
-  const [countryRateMessage, setCountryRateMessage] = useState<string | null>(null);
+  const [paymentDetailsMessage, setPaymentDetailsMessage] =
+    useState<string | null>(null);
+  const [countryRateMessage, setCountryRateMessage] =
+    useState<string | null>(null);
   const [pauseMessage, setPauseMessage] = useState<string | null>(null);
+
   const [activeTab, setActiveTab] = useState<AdminTab>("buyers");
 
-  const [rejectingPaymentId, setRejectingPaymentId] = useState<string | null>(null);
+  const [rejectingPaymentId, setRejectingPaymentId] =
+    useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState("");
 
-  const [announcementMessage, setAnnouncementMessage] = useState<string | null>(null);
+  const [announcementMessage, setAnnouncementMessage] =
+    useState<string | null>(null);
   const [payoutMessage, setPayoutMessage] = useState<string | null>(null);
 
-  const [deletingUser, setDeletingUser] = useState<{ id: string; name: string } | null>(null);
+  const [deletingUser, setDeletingUser] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
 
   function handleApproveBuyer(id: string) {
     startTransition(async () => {
       await approveBuyer(id);
+
       setData((prev) => ({
         ...prev,
         pendingBuyers: prev.pendingBuyers.filter((b) => b.id !== id),
-        approvedBuyers: [...prev.approvedBuyers, prev.pendingBuyers.find((b) => b.id === id)!].filter(Boolean),
+        approvedBuyers: [
+          ...prev.approvedBuyers,
+          prev.pendingBuyers.find((b) => b.id === id)!
+        ].filter(Boolean),
         pendingBuyerCount: prev.pendingBuyerCount - 1
       }));
     });
@@ -124,6 +166,7 @@ export default function AdminPanelClient({ initialData }: { initialData: AdminDa
   function handleRejectBuyer(id: string) {
     startTransition(async () => {
       await rejectBuyer(id);
+
       setData((prev) => ({
         ...prev,
         pendingBuyers: prev.pendingBuyers.filter((b) => b.id !== id),
@@ -134,16 +177,25 @@ export default function AdminPanelClient({ initialData }: { initialData: AdminDa
 
   function confirmDeleteUser() {
     if (!deletingUser) return;
+
     startTransition(async () => {
       const result = await deleteUser(deletingUser.id);
+
       if (result?.success) {
         setData((prev) => ({
           ...prev,
-          workers: prev.workers.filter((w) => w.id !== deletingUser.id),
-          approvedBuyers: prev.approvedBuyers.filter((b) => b.id !== deletingUser.id),
-          pendingBuyers: prev.pendingBuyers.filter((b) => b.id !== deletingUser.id)
+          workers: prev.workers.filter(
+            (w) => w.id !== deletingUser.id
+          ),
+          approvedBuyers: prev.approvedBuyers.filter(
+            (b) => b.id !== deletingUser.id
+          ),
+          pendingBuyers: prev.pendingBuyers.filter(
+            (b) => b.id !== deletingUser.id
+          )
         }));
       }
+
       setDeletingUser(null);
     });
   }
@@ -151,10 +203,15 @@ export default function AdminPanelClient({ initialData }: { initialData: AdminDa
   function handleApprovePayment(id: string) {
     startTransition(async () => {
       await approvePaymentRequest(id);
+
       setData((prev) => ({
         ...prev,
-        pendingPayments: prev.pendingPayments.filter((p) => p.id !== id),
-        allPayments: prev.allPayments.map((p) => (p.id === id ? { ...p, status: "APPROVED" } : p)),
+        pendingPayments: prev.pendingPayments.filter(
+          (p) => p.id !== id
+        ),
+        allPayments: prev.allPayments.map((p) =>
+          p.id === id ? { ...p, status: "APPROVED" } : p
+        ),
         pendingPaymentCount: prev.pendingPaymentCount - 1
       }));
     });
@@ -167,18 +224,30 @@ export default function AdminPanelClient({ initialData }: { initialData: AdminDa
 
   function submitRejectPayment() {
     if (!rejectingPaymentId || !rejectReason.trim()) return;
+
     const fd = new FormData();
     fd.set("reason", rejectReason.trim());
 
     startTransition(async () => {
-      const result = await rejectPaymentRequest(rejectingPaymentId, fd);
+      const result = await rejectPaymentRequest(
+        rejectingPaymentId,
+        fd
+      );
+
       if (result?.success) {
         setData((prev) => ({
           ...prev,
-          pendingPayments: prev.pendingPayments.filter((p) => p.id !== rejectingPaymentId),
-          allPayments: prev.allPayments.map((p) => (p.id === rejectingPaymentId ? { ...p, status: "REJECTED" } : p)),
+          pendingPayments: prev.pendingPayments.filter(
+            (p) => p.id !== rejectingPaymentId
+          ),
+          allPayments: prev.allPayments.map((p) =>
+            p.id === rejectingPaymentId
+              ? { ...p, status: "REJECTED" }
+              : p
+          ),
           pendingPaymentCount: prev.pendingPaymentCount - 1
         }));
+
         setRejectingPaymentId(null);
       }
     });
@@ -187,10 +256,14 @@ export default function AdminPanelClient({ initialData }: { initialData: AdminDa
   function handleApprovePayoutRequest(id: string) {
     startTransition(async () => {
       await approvePayoutRequest(id);
+
       setData((prev) => ({
         ...prev,
-        payoutRequests: prev.payoutRequests.filter((r) => r.id !== id),
-        pendingPayoutRequestCount: prev.pendingPayoutRequestCount - 1
+        payoutRequests: prev.payoutRequests.filter(
+          (r) => r.id !== id
+        ),
+        pendingPayoutRequestCount:
+          prev.pendingPayoutRequestCount - 1
       }));
     });
   }
@@ -198,28 +271,51 @@ export default function AdminPanelClient({ initialData }: { initialData: AdminDa
   function handleRejectPayoutRequest(id: string) {
     startTransition(async () => {
       await rejectPayoutRequest(id);
+
       setData((prev) => ({
         ...prev,
-        payoutRequests: prev.payoutRequests.filter((r) => r.id !== id),
-        pendingPayoutRequestCount: prev.pendingPayoutRequestCount - 1
+        payoutRequests: prev.payoutRequests.filter(
+          (r) => r.id !== id
+        ),
+        pendingPayoutRequestCount:
+          prev.pendingPayoutRequestCount - 1
       }));
     });
   }
 
   async function handleRateUpdate(formData: FormData) {
     setRateMessage(null);
+
     startTransition(async () => {
       const result = await updateSystemRates(formData);
+
       if (result) {
         setRateMessage(result.message);
+
         if (result.success) {
-          const sriLankaRate = parseFloat(String(formData.get("sriLankaRate") || "0"));
-          const exchangeRate = parseFloat(String(formData.get("exchangeRate") || "0"));
-          const referralCommission = parseFloat(String(formData.get("referralCommission") || "0"));
-          const otherCountriesRate = sriLankaRate / exchangeRate;
+          const sriLankaRate = parseFloat(
+            String(formData.get("sriLankaRate") || "0")
+          );
+
+          const exchangeRate = parseFloat(
+            String(formData.get("exchangeRate") || "0")
+          );
+
+          const referralCommission = parseFloat(
+            String(formData.get("referralCommission") || "0")
+          );
+
+          const otherCountriesRate =
+            sriLankaRate / exchangeRate;
+
           setData((prev) => ({
             ...prev,
-            settings: { sriLankaRate, exchangeRate, otherCountriesRate, referralCommission }
+            settings: {
+              sriLankaRate,
+              exchangeRate,
+              otherCountriesRate,
+              referralCommission
+            }
           }));
         }
       }
@@ -228,25 +324,53 @@ export default function AdminPanelClient({ initialData }: { initialData: AdminDa
 
   async function handleSetCountryRate(formData: FormData) {
     setCountryRateMessage(null);
+
     startTransition(async () => {
       const result = await setCountryRate(formData);
+
       if (result) {
         setCountryRateMessage(result.message);
+
         if (result.success) {
-          const countryCode = String(formData.get("countryCode"));
-          const countryName = String(formData.get("countryName"));
-          const rate = parseFloat(String(formData.get("rate")));
+          const countryCode = String(
+            formData.get("countryCode")
+          );
+
+          const countryName = String(
+            formData.get("countryName")
+          );
+
+          const rate = parseFloat(
+            String(formData.get("rate"))
+          );
+
           setData((prev) => {
-            const existing = prev.countryRates.find((c) => c.countryCode === countryCode);
+            const existing = prev.countryRates.find(
+              (c) => c.countryCode === countryCode
+            );
+
             if (existing) {
               return {
                 ...prev,
-                countryRates: prev.countryRates.map((c) => (c.countryCode === countryCode ? { ...c, rate } : c))
+                countryRates: prev.countryRates.map((c) =>
+                  c.countryCode === countryCode
+                    ? { ...c, rate }
+                    : c
+                )
               };
             }
+
             return {
               ...prev,
-              countryRates: [...prev.countryRates, { id: `temp-${Date.now()}`, countryCode, countryName, rate }]
+              countryRates: [
+                ...prev.countryRates,
+                {
+                  id: `temp-${Date.now()}`,
+                  countryCode,
+                  countryName,
+                  rate
+                }
+              ]
             };
           });
         }
@@ -257,19 +381,38 @@ export default function AdminPanelClient({ initialData }: { initialData: AdminDa
   function handleDeleteCountryRate(countryCode: string) {
     startTransition(async () => {
       await deleteCountryRate(countryCode);
-      setData((prev) => ({ ...prev, countryRates: prev.countryRates.filter((c) => c.countryCode !== countryCode) }));
+
+      setData((prev) => ({
+        ...prev,
+        countryRates: prev.countryRates.filter(
+          (c) => c.countryCode !== countryCode
+        )
+      }));
     });
   }
 
-  async function handleAdminPaymentDetailsUpdate(formData: FormData) {
+  async function handleAdminPaymentDetailsUpdate(
+    formData: FormData
+  ) {
     setPaymentDetailsMessage(null);
+
     startTransition(async () => {
       const result = await updateAdminPaymentDetails(formData);
+
       if (result) {
         setPaymentDetailsMessage(result.message);
+
         if (result.success) {
-          const paymentDetails = String(formData.get("paymentDetails") || "");
-          setData((prev) => ({ ...prev, admin: prev.admin ? { ...prev.admin, paymentDetails } : prev.admin }));
+          const paymentDetails = String(
+            formData.get("paymentDetails") || ""
+          );
+
+          setData((prev) => ({
+            ...prev,
+            admin: prev.admin
+              ? { ...prev.admin, paymentDetails }
+              : prev.admin
+          }));
         }
       }
     });
@@ -277,36 +420,68 @@ export default function AdminPanelClient({ initialData }: { initialData: AdminDa
 
   async function handleSendAnnouncement(formData: FormData) {
     setAnnouncementMessage(null);
+
     startTransition(async () => {
       const result = await sendAnnouncement(formData);
-      if (result) setAnnouncementMessage(result.message);
+
+      if (result) {
+        setAnnouncementMessage(result.message);
+      }
     });
   }
 
   async function handleUploadPayout(formData: FormData) {
     setPayoutMessage(null);
+
     startTransition(async () => {
       const result = await uploadPayoutProof(formData);
-      if (result) setPayoutMessage(result.message);
+
+      if (result) {
+        setPayoutMessage(result.message);
+      }
     });
   }
 
   function handleTogglePause() {
     setPauseMessage(null);
+
     startTransition(async () => {
       const result = await toggleSystemPause();
+
       if (result) {
         setPauseMessage(result.message);
-        setData((prev) => ({ ...prev, isSystemPaused: result.isPaused }));
+
+        setData((prev) => ({
+          ...prev,
+          isSystemPaused: result.isPaused
+        }));
       }
     });
   }
 
-  const availableCount = data.accountStats.find((s) => s.status === "AVAILABLE")?._count.status ?? 0;
-  const soldCount = data.accountStats.find((s) => s.status === "SOLD")?._count.status ?? 0;
-  const totalNotifications = data.pendingPaymentCount + data.pendingBuyerCount + data.pendingPayoutRequestCount;
+  const availableCount =
+    data.accountStats.find(
+      (s) => s.status === "AVAILABLE"
+    )?._count.status ?? 0;
 
-  const tabs: AdminTab[] = ["buyers", "workers", "payments", "payouts", "announcements", "settings"];
+  const soldCount =
+    data.accountStats.find(
+      (s) => s.status === "SOLD"
+    )?._count.status ?? 0;
+
+  const totalNotifications =
+    data.pendingPaymentCount +
+    data.pendingBuyerCount +
+    data.pendingPayoutRequestCount;
+
+  const tabs: AdminTab[] = [
+    "buyers",
+    "workers",
+    "payments",
+    "payouts",
+    "announcements",
+    "settings"
+  ];
 
   return (
     <div>
@@ -315,21 +490,32 @@ export default function AdminPanelClient({ initialData }: { initialData: AdminDa
           <span className="flex h-8 w-8 items-center justify-center rounded-full bg-amber-500/20 text-lg font-bold text-amber-300">
             {totalNotifications}
           </span>
+
           <p className="text-sm font-semibold text-amber-200">
-            {data.pendingPaymentCount} pending payment{data.pendingPaymentCount !== 1 ? "s" : ""},{" "}
-            {data.pendingBuyerCount} pending buyer{data.pendingBuyerCount !== 1 ? "s" : ""}, and{" "}
-            {data.pendingPayoutRequestCount} payout request{data.pendingPayoutRequestCount !== 1 ? "s" : ""} awaiting review.
+            {data.pendingPaymentCount} pending payment
+            {data.pendingPaymentCount !== 1 ? "s" : ""},{" "}
+            {data.pendingBuyerCount} pending buyer
+            {data.pendingBuyerCount !== 1 ? "s" : ""}, and{" "}
+            {data.pendingPayoutRequestCount} payout request
+            {data.pendingPayoutRequestCount !== 1 ? "s" : ""}{" "}
+            awaiting review.
           </p>
         </div>
       )}
 
       <div className="mb-6 flex items-center justify-between rounded-xl border border-white/10 bg-white/5 px-5 py-4">
         <div>
-          <p className="text-sm font-semibold text-white">System Status</p>
+          <p className="text-sm font-semibold text-white">
+            System Status
+          </p>
+
           <p className="text-xs text-slate-400">
-            {data.isSystemPaused ? "Paused — workers cannot submit accounts" : "Running normally"}
+            {data.isSystemPaused
+              ? "Paused — workers cannot submit accounts"
+              : "Running normally"}
           </p>
         </div>
+
         <button
           onClick={handleTogglePause}
           disabled={isPending}
@@ -339,9 +525,12 @@ export default function AdminPanelClient({ initialData }: { initialData: AdminDa
               : "bg-rose-500/20 text-rose-300 hover:bg-rose-500/30"
           }`}
         >
-          {data.isSystemPaused ? "Resume System" : "Pause System"}
+          {data.isSystemPaused
+            ? "Resume System"
+            : "Pause System"}
         </button>
       </div>
+
       {pauseMessage && (
         <div className="mb-6 rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">
           {pauseMessage}
@@ -350,20 +539,39 @@ export default function AdminPanelClient({ initialData }: { initialData: AdminDa
 
       <div className="mb-8 grid grid-cols-2 gap-4 sm:grid-cols-4">
         <div className="glass-card !p-4 text-center">
-          <p className="text-2xl font-bold text-galaxy-accent2">{data.pendingBuyers.length}</p>
-          <p className="text-xs text-slate-400">Pending Buyers</p>
+          <p className="text-2xl font-bold text-galaxy-accent2">
+            {data.pendingBuyers.length}
+          </p>
+          <p className="text-xs text-slate-400">
+            Pending Buyers
+          </p>
         </div>
+
         <div className="glass-card !p-4 text-center">
-          <p className="text-2xl font-bold text-galaxy-accent2">{data.workers.length}</p>
-          <p className="text-xs text-slate-400">Total Workers</p>
+          <p className="text-2xl font-bold text-galaxy-accent2">
+            {data.workers.length}
+          </p>
+          <p className="text-xs text-slate-400">
+            Total Workers
+          </p>
         </div>
+
         <div className="glass-card !p-4 text-center">
-          <p className="text-2xl font-bold text-emerald-400">{availableCount}</p>
-          <p className="text-xs text-slate-400">Accounts Available</p>
+          <p className="text-2xl font-bold text-emerald-400">
+            {availableCount}
+          </p>
+          <p className="text-xs text-slate-400">
+            Accounts Available
+          </p>
         </div>
+
         <div className="glass-card !p-4 text-center">
-          <p className="text-2xl font-bold text-galaxy-glow">{soldCount}</p>
-          <p className="text-xs text-slate-400">Accounts Sold</p>
+          <p className="text-2xl font-bold text-galaxy-glow">
+            {soldCount}
+          </p>
+          <p className="text-xs text-slate-400">
+            Accounts Sold
+          </p>
         </div>
       </div>
 
@@ -379,21 +587,27 @@ export default function AdminPanelClient({ initialData }: { initialData: AdminDa
             }`}
           >
             {t}
-            {t === "buyers" && data.pendingBuyerCount > 0 && (
-              <span className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-rose-500 text-[10px] font-bold text-white">
-                {data.pendingBuyerCount}
-              </span>
-            )}
-            {t === "payments" && data.pendingPaymentCount > 0 && (
-              <span className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-rose-500 text-[10px] font-bold text-white">
-                {data.pendingPaymentCount}
-              </span>
-            )}
-            {t === "payouts" && data.pendingPayoutRequestCount > 0 && (
-              <span className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-rose-500 text-[10px] font-bold text-white">
-                {data.pendingPayoutRequestCount}
-              </span>
-            )}
+
+            {t === "buyers" &&
+              data.pendingBuyerCount > 0 && (
+                <span className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-rose-500 text-[10px] font-bold text-white">
+                  {data.pendingBuyerCount}
+                </span>
+              )}
+
+            {t === "payments" &&
+              data.pendingPaymentCount > 0 && (
+                <span className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-rose-500 text-[10px] font-bold text-white">
+                  {data.pendingPaymentCount}
+                </span>
+              )}
+
+            {t === "payouts" &&
+              data.pendingPayoutRequestCount > 0 && (
+                <span className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-rose-500 text-[10px] font-bold text-white">
+                  {data.pendingPayoutRequestCount}
+                </span>
+              )}
           </button>
         ))}
       </div>
@@ -402,25 +616,51 @@ export default function AdminPanelClient({ initialData }: { initialData: AdminDa
         <div className="space-y-8">
           <section>
             <h2 className="mb-4 text-lg font-semibold text-white">
-              Pending Buyer Requests ({data.pendingBuyers.length})
+              Pending Buyer Requests (
+              {data.pendingBuyers.length})
             </h2>
+
             {data.pendingBuyers.length === 0 ? (
-              <p className="glass-panel p-6 text-sm text-slate-400">No pending requests.</p>
+              <p className="glass-panel p-6 text-sm text-slate-400">
+                No pending requests.
+              </p>
             ) : (
               <div className="space-y-3">
                 {data.pendingBuyers.map((buyer) => (
-                  <div key={buyer.id} className="glass-panel flex flex-wrap items-center justify-between gap-3 p-4">
+                  <div
+                    key={buyer.id}
+                    className="glass-panel flex flex-wrap items-center justify-between gap-3 p-4"
+                  >
                     <div>
-                      <p className="font-semibold text-white">{buyer.name}</p>
-                      <p className="text-sm text-slate-400">{buyer.email}</p>
+                      <p className="font-semibold text-white">
+                        {buyer.name}
+                      </p>
+
+                      {/* UPDATED: Pending buyer type display */}
+                      <p className="text-sm text-slate-400">
+                        {buyer.email} •{" "}
+                        <span className="font-semibold text-galaxy-accent2">
+                          {buyer.buyerType ?? "GMAIL"}
+                        </span>
+                      </p>
                     </div>
+
                     <div className="flex gap-2">
-                      <button disabled={isPending} onClick={() => handleApproveBuyer(buyer.id)} className="btn-primary !px-4 !py-2 text-sm">
-                        Approve
-                      </button>
                       <button
                         disabled={isPending}
-                        onClick={() => handleRejectBuyer(buyer.id)}
+                        onClick={() =>
+                          handleApproveBuyer(buyer.id)
+                        }
+                        className="btn-primary !px-4 !py-2 text-sm"
+                      >
+                        Approve
+                      </button>
+
+                      <button
+                        disabled={isPending}
+                        onClick={() =>
+                          handleRejectBuyer(buyer.id)
+                        }
                         className="btn-secondary !px-4 !py-2 text-sm hover:!border-rose-400 hover:!text-rose-400"
                       >
                         Reject
@@ -434,21 +674,41 @@ export default function AdminPanelClient({ initialData }: { initialData: AdminDa
 
           <section>
             <h2 className="mb-4 text-lg font-semibold text-white">
-              Approved Buyers ({data.approvedBuyers.length})
+              Approved Buyers (
+              {data.approvedBuyers.length})
             </h2>
+
             {data.approvedBuyers.length === 0 ? (
-              <p className="glass-panel p-6 text-sm text-slate-400">No approved buyers yet.</p>
+              <p className="glass-panel p-6 text-sm text-slate-400">
+                No approved buyers yet.
+              </p>
             ) : (
               <div className="space-y-2">
                 {data.approvedBuyers.map((b) => (
-                  <div key={b.id} className="glass-panel flex flex-wrap items-center justify-between gap-3 p-4">
+                  <div
+                    key={b.id}
+                    className="glass-panel flex flex-wrap items-center justify-between gap-3 p-4"
+                  >
                     <div>
-                      <p className="font-semibold text-white">{b.name}</p>
-                      <p className="text-xs text-slate-400">{b.email} • {b.country ?? "Unknown"}</p>
+                      <p className="font-semibold text-white">
+                        {b.name}
+                      </p>
+
+                      {/* UPDATED: Approved buyer type display */}
+                      <p className="text-xs text-slate-400">
+                        {b.email} • {b.buyerType ?? "GMAIL"} •{" "}
+                        {b.country ?? "Unknown"}
+                      </p>
                     </div>
+
                     <button
                       disabled={isPending}
-                      onClick={() => setDeletingUser({ id: b.id, name: b.name })}
+                      onClick={() =>
+                        setDeletingUser({
+                          id: b.id,
+                          name: b.name
+                        })
+                      }
                       className="rounded-lg px-3 py-1.5 text-xs font-semibold text-rose-400 hover:bg-rose-500/10"
                     >
                       Delete
@@ -463,41 +723,72 @@ export default function AdminPanelClient({ initialData }: { initialData: AdminDa
 
       {activeTab === "workers" && (
         <section>
-          <h2 className="mb-4 text-lg font-semibold text-white">Workers ({data.workers.length})</h2>
+          <h2 className="mb-4 text-lg font-semibold text-white">
+            Workers ({data.workers.length})
+          </h2>
+
           {data.workers.length === 0 ? (
-            <p className="glass-panel p-6 text-sm text-slate-400">No workers yet.</p>
+            <p className="glass-panel p-6 text-sm text-slate-400">
+              No workers yet.
+            </p>
           ) : (
             <div className="space-y-3">
               {data.workers.map((w) => (
-                <div key={w.id} className="glass-panel p-4">
+                <div
+                  key={w.id}
+                  className="glass-panel p-4"
+                >
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
                       <p className="font-semibold text-white">
-                        <span className="font-mono text-galaxy-accent2">{w.displayId}</span> — {w.name}
+                        <span className="font-mono text-galaxy-accent2">
+                          {w.displayId}
+                        </span>{" "}
+                        — {w.name}
                       </p>
-                      <p className="text-sm text-slate-400">{w.email} • {w.country ?? "Unknown"}</p>
+
+                      <p className="text-sm text-slate-400">
+                        {w.email} • {w.country ?? "Unknown"}
+                      </p>
                     </div>
+
                     <div className="text-right">
                       <p className="font-semibold text-emerald-400">
-                        {w.country === "LK" ? "Rs. " : "$"}{w.balance.toFixed(2)}
+                        {w.country === "LK" ? "Rs. " : "$"}
+                        {w.balance.toFixed(2)}
                       </p>
+
                       <p className="text-xs text-amber-400">
-                        Pending: {w.country === "LK" ? "Rs. " : "$"}{w.pendingBalance.toFixed(2)}
+                        Pending:{" "}
+                        {w.country === "LK" ? "Rs. " : "$"}
+                        {w.pendingBalance.toFixed(2)}
                       </p>
                     </div>
                   </div>
+
                   <div className="mt-3 flex items-center justify-between gap-3">
                     <div className="flex-1 rounded-lg border border-white/10 bg-white/5 p-3">
                       <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">
                         Payment Details
                       </p>
+
                       <p className="whitespace-pre-wrap text-sm text-slate-200">
-                        {w.paymentDetails || <span className="italic text-slate-500">Not provided yet</span>}
+                        {w.paymentDetails || (
+                          <span className="italic text-slate-500">
+                            Not provided yet
+                          </span>
+                        )}
                       </p>
                     </div>
+
                     <button
                       disabled={isPending}
-                      onClick={() => setDeletingUser({ id: w.id, name: w.name })}
+                      onClick={() =>
+                        setDeletingUser({
+                          id: w.id,
+                          name: w.name
+                        })
+                      }
                       className="rounded-lg px-3 py-1.5 text-xs font-semibold text-rose-400 hover:bg-rose-500/10"
                     >
                       Delete
@@ -514,37 +805,72 @@ export default function AdminPanelClient({ initialData }: { initialData: AdminDa
         <div className="space-y-8">
           <section>
             <h2 className="mb-4 text-lg font-semibold text-white">
-              Pending Payment Approvals ({data.pendingPayments.length})
+              Pending Payment Approvals (
+              {data.pendingPayments.length})
             </h2>
+
             {data.pendingPayments.length === 0 ? (
-              <p className="glass-panel p-6 text-sm text-slate-400">No pending payments.</p>
+              <p className="glass-panel p-6 text-sm text-slate-400">
+                No pending payments.
+              </p>
             ) : (
               <div className="space-y-3">
                 {data.pendingPayments.map((p) => (
-                  <div key={p.id} className="glass-panel p-4">
+                  <div
+                    key={p.id}
+                    className="glass-panel p-4"
+                  >
                     <div className="flex flex-wrap items-start justify-between gap-4">
                       <div className="flex-1">
-                        <p className="font-semibold text-white">{p.buyer.name} — ${p.amount.toFixed(2)}</p>
-                        <p className="text-sm text-slate-400">{p.buyer.email}</p>
-                        <a href={p.proofSlipUrl} target="_blank" rel="noopener noreferrer" className="text-xs font-semibold text-galaxy-accent2 hover:underline">
+                        <p className="font-semibold text-white">
+                          {p.buyer.name} — $
+                          {p.amount.toFixed(2)}
+                        </p>
+
+                        <p className="text-sm text-slate-400">
+                          {p.buyer.email}
+                        </p>
+
+                        <a
+                          href={p.proofSlipUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs font-semibold text-galaxy-accent2 hover:underline"
+                        >
                           View Proof Slip →
                         </a>
+
                         <div className="mt-3 rounded-lg border border-white/10 bg-white/5 p-3">
                           <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">
                             Buyer Paid From
                           </p>
+
                           <p className="whitespace-pre-wrap text-sm text-slate-200">
-                            {p.buyerPaymentDetails || <span className="italic text-slate-500">Not provided</span>}
+                            {p.buyerPaymentDetails || (
+                              <span className="italic text-slate-500">
+                                Not provided
+                              </span>
+                            )}
                           </p>
                         </div>
                       </div>
+
                       <div className="flex gap-2">
-                        <button disabled={isPending} onClick={() => handleApprovePayment(p.id)} className="btn-primary !px-4 !py-2 text-sm">
-                          Approve
-                        </button>
                         <button
                           disabled={isPending}
-                          onClick={() => openRejectModal(p.id)}
+                          onClick={() =>
+                            handleApprovePayment(p.id)
+                          }
+                          className="btn-primary !px-4 !py-2 text-sm"
+                        >
+                          Approve
+                        </button>
+
+                        <button
+                          disabled={isPending}
+                          onClick={() =>
+                            openRejectModal(p.id)
+                          }
                           className="btn-secondary !px-4 !py-2 text-sm hover:!border-rose-400 hover:!text-rose-400"
                         >
                           Reject
@@ -558,21 +884,46 @@ export default function AdminPanelClient({ initialData }: { initialData: AdminDa
           </section>
 
           <section>
-            <h2 className="mb-4 text-lg font-semibold text-white">Payment History</h2>
+            <h2 className="mb-4 text-lg font-semibold text-white">
+              Payment History
+            </h2>
+
             <div className="overflow-x-auto">
               <table className="table-glass">
-                <thead><tr><th>Buyer</th><th>Amount</th><th>Status</th><th>Date</th></tr></thead>
+                <thead>
+                  <tr>
+                    <th>Buyer</th>
+                    <th>Amount</th>
+                    <th>Status</th>
+                    <th>Date</th>
+                  </tr>
+                </thead>
+
                 <tbody>
                   {data.allPayments.map((p) => (
                     <tr key={p.id}>
                       <td>{p.buyer.name}</td>
                       <td>${p.amount.toFixed(2)}</td>
+
                       <td>
-                        <span className={p.status === "APPROVED" ? "badge-approved" : p.status === "REJECTED" ? "badge-rejected" : "badge-pending"}>
+                        <span
+                          className={
+                            p.status === "APPROVED"
+                              ? "badge-approved"
+                              : p.status === "REJECTED"
+                                ? "badge-rejected"
+                                : "badge-pending"
+                          }
+                        >
                           {p.status}
                         </span>
                       </td>
-                      <td>{new Date(p.createdAt).toLocaleDateString()}</td>
+
+                      <td>
+                        {new Date(
+                          p.createdAt
+                        ).toLocaleDateString()}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -586,29 +937,52 @@ export default function AdminPanelClient({ initialData }: { initialData: AdminDa
         <div className="space-y-8">
           <section>
             <h2 className="mb-4 text-lg font-semibold text-white">
-              Pending Payout Requests ({data.payoutRequests.length})
+              Pending Payout Requests (
+              {data.payoutRequests.length})
             </h2>
+
             {data.payoutRequests.length === 0 ? (
-              <p className="glass-panel p-6 text-sm text-slate-400">No pending payout requests.</p>
+              <p className="glass-panel p-6 text-sm text-slate-400">
+                No pending payout requests.
+              </p>
             ) : (
               <div className="space-y-3">
                 {data.payoutRequests.map((r) => (
-                  <div key={r.id} className="glass-panel flex flex-wrap items-center justify-between gap-3 p-4">
+                  <div
+                    key={r.id}
+                    className="glass-panel flex flex-wrap items-center justify-between gap-3 p-4"
+                  >
                     <div>
                       <p className="font-semibold text-white">
                         {r.worker.displayId} — {r.worker.name}
                       </p>
+
                       <p className="text-sm text-slate-400">
-                        Requested: <span className="text-amber-400">${r.amount.toFixed(2)}</span> (Balance: ${r.worker.balance.toFixed(2)})
+                        Requested:{" "}
+                        <span className="text-amber-400">
+                          ${r.amount.toFixed(2)}
+                        </span>{" "}
+                        (Balance: $
+                        {r.worker.balance.toFixed(2)})
                       </p>
                     </div>
+
                     <div className="flex gap-2">
-                      <button disabled={isPending} onClick={() => handleApprovePayoutRequest(r.id)} className="btn-primary !px-4 !py-2 text-sm">
-                        Approve
-                      </button>
                       <button
                         disabled={isPending}
-                        onClick={() => handleRejectPayoutRequest(r.id)}
+                        onClick={() =>
+                          handleApprovePayoutRequest(r.id)
+                        }
+                        className="btn-primary !px-4 !py-2 text-sm"
+                      >
+                        Approve
+                      </button>
+
+                      <button
+                        disabled={isPending}
+                        onClick={() =>
+                          handleRejectPayoutRequest(r.id)
+                        }
                         className="btn-secondary !px-4 !py-2 text-sm hover:!border-rose-400 hover:!text-rose-400"
                       >
                         Reject
@@ -621,33 +995,77 @@ export default function AdminPanelClient({ initialData }: { initialData: AdminDa
           </section>
 
           <section className="glass-panel max-w-lg p-6">
-            <h2 className="mb-1 text-lg font-semibold text-white">Upload Payout Proof</h2>
+            <h2 className="mb-1 text-lg font-semibold text-white">
+              Upload Payout Proof
+            </h2>
+
             <p className="mb-4 text-xs text-slate-400">
-              After paying a worker, upload the transaction slip/screenshot. This deducts from
-              their confirmed balance and notifies them.
+              After paying a worker, upload the transaction
+              slip/screenshot. This deducts from their confirmed
+              balance and notifies them.
             </p>
-            <form action={handleUploadPayout} className="space-y-4">
+
+            <form
+              action={handleUploadPayout}
+              className="space-y-4"
+            >
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-slate-300">Worker</label>
-                <select name="workerId" required className="glass-input">
-                  <option value="">Select a worker...</option>
+                <label className="mb-1.5 block text-sm font-medium text-slate-300">
+                  Worker
+                </label>
+
+                <select
+                  name="workerId"
+                  required
+                  className="glass-input"
+                >
+                  <option value="">
+                    Select a worker...
+                  </option>
+
                   {data.workers.map((w) => (
                     <option key={w.id} value={w.id}>
-                      {w.displayId} — {w.name} (Balance: ${w.balance.toFixed(2)})
+                      {w.displayId} — {w.name} (Balance: $
+                      {w.balance.toFixed(2)})
                     </option>
                   ))}
                 </select>
               </div>
+
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-slate-300">Amount Paid</label>
-                <input type="number" name="amount" step="0.01" min="0" required className="glass-input" placeholder="0.00" />
+                <label className="mb-1.5 block text-sm font-medium text-slate-300">
+                  Amount Paid
+                </label>
+
+                <input
+                  type="number"
+                  name="amount"
+                  step="0.01"
+                  min="0"
+                  required
+                  className="glass-input"
+                  placeholder="0.00"
+                />
               </div>
+
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-slate-300">Note (optional)</label>
-                <input type="text" name="note" className="glass-input" placeholder="e.g. September payout" />
+                <label className="mb-1.5 block text-sm font-medium text-slate-300">
+                  Note (optional)
+                </label>
+
+                <input
+                  type="text"
+                  name="note"
+                  className="glass-input"
+                  placeholder="e.g. September payout"
+                />
               </div>
+
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-slate-300">Proof (Slip / Screenshot)</label>
+                <label className="mb-1.5 block text-sm font-medium text-slate-300">
+                  Proof (Slip / Screenshot)
+                </label>
+
                 <input
                   type="file"
                   name="proofFile"
@@ -663,28 +1081,61 @@ export default function AdminPanelClient({ initialData }: { initialData: AdminDa
                 </div>
               )}
 
-              <button type="submit" disabled={isPending} className="btn-primary w-full">
-                {isPending ? "Uploading..." : "Upload & Notify Worker"}
+              <button
+                type="submit"
+                disabled={isPending}
+                className="btn-primary w-full"
+              >
+                {isPending
+                  ? "Uploading..."
+                  : "Upload & Notify Worker"}
               </button>
             </form>
           </section>
 
           <section>
-            <h2 className="mb-4 text-lg font-semibold text-white">Recent Payouts</h2>
+            <h2 className="mb-4 text-lg font-semibold text-white">
+              Recent Payouts
+            </h2>
+
             {data.payoutProofs.length === 0 ? (
-              <p className="glass-panel p-6 text-sm text-slate-400">No payouts recorded yet.</p>
+              <p className="glass-panel p-6 text-sm text-slate-400">
+                No payouts recorded yet.
+              </p>
             ) : (
               <div className="overflow-x-auto">
                 <table className="table-glass">
-                  <thead><tr><th>Worker</th><th>Amount</th><th>Date</th><th>Proof</th></tr></thead>
+                  <thead>
+                    <tr>
+                      <th>Worker</th>
+                      <th>Amount</th>
+                      <th>Date</th>
+                      <th>Proof</th>
+                    </tr>
+                  </thead>
+
                   <tbody>
                     {data.payoutProofs.map((p) => (
                       <tr key={p.id}>
-                        <td>{p.worker.displayId} — {p.worker.name}</td>
-                        <td>${p.amount.toFixed(2)}</td>
-                        <td>{new Date(p.createdAt).toLocaleDateString()}</td>
                         <td>
-                          <a href={p.proofUrl} target="_blank" rel="noopener noreferrer" className="text-galaxy-accent2 hover:underline">
+                          {p.worker.displayId} — {p.worker.name}
+                        </td>
+
+                        <td>${p.amount.toFixed(2)}</td>
+
+                        <td>
+                          {new Date(
+                            p.createdAt
+                          ).toLocaleDateString()}
+                        </td>
+
+                        <td>
+                          <a
+                            href={p.proofUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-galaxy-accent2 hover:underline"
+                          >
                             View
                           </a>
                         </td>
@@ -700,34 +1151,78 @@ export default function AdminPanelClient({ initialData }: { initialData: AdminDa
 
       {activeTab === "announcements" && (
         <section className="glass-panel max-w-lg p-6">
-          <h2 className="mb-1 text-lg font-semibold text-white">Send Announcement</h2>
+          <h2 className="mb-1 text-lg font-semibold text-white">
+            Send Announcement
+          </h2>
+
           <p className="mb-4 text-xs text-slate-400">
-            Send a message to a specific worker, or broadcast to all workers at once.
+            Send a message to a specific worker, or broadcast
+            to all workers at once.
           </p>
-          <form action={handleSendAnnouncement} className="space-y-4">
+
+          <form
+            action={handleSendAnnouncement}
+            className="space-y-4"
+          >
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-slate-300">Send To</label>
-              <select name="targetWorkerId" required className="glass-input">
+              <label className="mb-1.5 block text-sm font-medium text-slate-300">
+                Send To
+              </label>
+
+              <select
+                name="targetWorkerId"
+                required
+                className="glass-input"
+              >
                 <option value="ALL">All Workers</option>
+
                 {data.workers.map((w) => (
-                  <option key={w.id} value={w.id}>{w.displayId} — {w.name}</option>
+                  <option key={w.id} value={w.id}>
+                    {w.displayId} — {w.name}
+                  </option>
                 ))}
               </select>
             </div>
+
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-slate-300">Title</label>
-              <input type="text" name="title" required className="glass-input" placeholder="e.g. Rate Update" />
+              <label className="mb-1.5 block text-sm font-medium text-slate-300">
+                Title
+              </label>
+
+              <input
+                type="text"
+                name="title"
+                required
+                className="glass-input"
+                placeholder="e.g. Rate Update"
+              />
             </div>
+
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-slate-300">Message</label>
-              <textarea name="message" required rows={4} className="glass-input resize-none" placeholder="Type your announcement here..." />
+              <label className="mb-1.5 block text-sm font-medium text-slate-300">
+                Message
+              </label>
+
+              <textarea
+                name="message"
+                required
+                rows={4}
+                className="glass-input resize-none"
+                placeholder="Type your announcement here..."
+              />
             </div>
+
             {announcementMessage && (
               <div className="rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">
                 {announcementMessage}
               </div>
             )}
-            <button type="submit" disabled={isPending} className="btn-primary w-full">
+
+            <button
+              type="submit"
+              disabled={isPending}
+              className="btn-primary w-full"
+            >
               {isPending ? "Sending..." : "Send Announcement"}
             </button>
           </form>
@@ -737,62 +1232,158 @@ export default function AdminPanelClient({ initialData }: { initialData: AdminDa
       {activeTab === "settings" && (
         <div className="grid gap-6 lg:grid-cols-2">
           <section className="glass-panel p-6">
-            <h2 className="mb-4 text-lg font-semibold text-white">Default Rate Settings</h2>
-            <form action={handleRateUpdate} className="space-y-4">
+            <h2 className="mb-4 text-lg font-semibold text-white">
+              Default Rate Settings
+            </h2>
+
+            <form
+              action={handleRateUpdate}
+              className="space-y-4"
+            >
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-slate-300">Sri Lanka Rate (Rs.)</label>
-                <input type="number" name="sriLankaRate" step="0.01" min="0" required defaultValue={data.settings?.sriLankaRate ?? 50} className="glass-input" />
+                <label className="mb-1.5 block text-sm font-medium text-slate-300">
+                  Sri Lanka Rate (Rs.)
+                </label>
+
+                <input
+                  type="number"
+                  name="sriLankaRate"
+                  step="0.01"
+                  min="0"
+                  required
+                  defaultValue={
+                    data.settings?.sriLankaRate ?? 50
+                  }
+                  className="glass-input"
+                />
               </div>
+
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-slate-300">Exchange Rate (1 USD = ___ LKR)</label>
-                <input type="number" name="exchangeRate" step="0.01" min="1" required defaultValue={data.settings?.exchangeRate ?? 300} className="glass-input" />
+                <label className="mb-1.5 block text-sm font-medium text-slate-300">
+                  Exchange Rate (1 USD = ___ LKR)
+                </label>
+
+                <input
+                  type="number"
+                  name="exchangeRate"
+                  step="0.01"
+                  min="1"
+                  required
+                  defaultValue={
+                    data.settings?.exchangeRate ?? 300
+                  }
+                  className="glass-input"
+                />
+
                 <p className="mt-1 text-[11px] text-slate-500">
-                  Used to auto-calculate the USD rate for other countries from the Sri Lanka rate.
+                  Used to auto-calculate the USD rate for
+                  other countries from the Sri Lanka rate.
                 </p>
               </div>
+
               <div className="rounded-lg border border-galaxy-accent2/30 bg-galaxy-accent2/10 p-3 text-sm text-galaxy-accent2">
                 Auto-calculated rate for other countries: $
-                {data.settings ? (data.settings.sriLankaRate / data.settings.exchangeRate).toFixed(2) : "0.00"}
+                {data.settings
+                  ? (
+                      data.settings.sriLankaRate /
+                      data.settings.exchangeRate
+                    ).toFixed(2)
+                  : "0.00"}
               </div>
+
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-slate-300">Referral Commission (%)</label>
-                <input type="number" name="referralCommission" step="0.01" min="0" required defaultValue={data.settings?.referralCommission ?? 10} className="glass-input" />
+                <label className="mb-1.5 block text-sm font-medium text-slate-300">
+                  Referral Commission (%)
+                </label>
+
+                <input
+                  type="number"
+                  name="referralCommission"
+                  step="0.01"
+                  min="0"
+                  required
+                  defaultValue={
+                    data.settings?.referralCommission ?? 10
+                  }
+                  className="glass-input"
+                />
               </div>
+
               {rateMessage && (
                 <div className="rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">
                   {rateMessage}
                 </div>
               )}
-              <button type="submit" disabled={isPending} className="btn-primary w-full">
-                {isPending ? "Updating..." : "Update Default Rates"}
+
+              <button
+                type="submit"
+                disabled={isPending}
+                className="btn-primary w-full"
+              >
+                {isPending
+                  ? "Updating..."
+                  : "Update Default Rates"}
               </button>
             </form>
           </section>
 
           <section className="glass-panel p-6">
-            <h2 className="mb-1 text-lg font-semibold text-white">Country-Specific Rate Override</h2>
+            <h2 className="mb-1 text-lg font-semibold text-white">
+              Country-Specific Rate Override
+            </h2>
+
             <p className="mb-4 text-xs text-slate-400">
-              Set a custom rate for a specific country (Sri Lanka uses Rs., all others use $).
+              Set a custom rate for a specific country
+              (Sri Lanka uses Rs., all others use $).
             </p>
-            <form action={handleSetCountryRate} className="space-y-4">
+
+            <form
+              action={handleSetCountryRate}
+              className="space-y-4"
+            >
               <select
                 name="countryCode"
                 required
                 className="glass-input"
                 onChange={(e) => {
                   const form = e.target.closest("form");
-                  const nameInput = form?.querySelector('input[name="countryName"]') as HTMLInputElement | null;
-                  const selected = COUNTRIES.find((c) => c.code === e.target.value);
-                  if (nameInput && selected) nameInput.value = selected.name;
+
+                  const nameInput = form?.querySelector(
+                    'input[name="countryName"]'
+                  ) as HTMLInputElement | null;
+
+                  const selected = COUNTRIES.find(
+                    (c) => c.code === e.target.value
+                  );
+
+                  if (nameInput && selected) {
+                    nameInput.value = selected.name;
+                  }
                 }}
               >
                 <option value="">Select country...</option>
+
                 {COUNTRIES.map((c) => (
-                  <option key={c.code} value={c.code}>{c.name}</option>
+                  <option key={c.code} value={c.code}>
+                    {c.name}
+                  </option>
                 ))}
               </select>
-              <input type="hidden" name="countryName" />
-              <input type="number" name="rate" step="0.01" min="0" required className="glass-input" placeholder="Custom rate (Rs. for Sri Lanka, $ for others)" />
+
+              <input
+                type="hidden"
+                name="countryName"
+              />
+
+              <input
+                type="number"
+                name="rate"
+                step="0.01"
+                min="0"
+                required
+                className="glass-input"
+                placeholder="Custom rate (Rs. for Sri Lanka, $ for others)"
+              />
 
               {countryRateMessage && (
                 <div className="rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">
@@ -800,7 +1391,11 @@ export default function AdminPanelClient({ initialData }: { initialData: AdminDa
                 </div>
               )}
 
-              <button type="submit" disabled={isPending} className="btn-primary w-full">
+              <button
+                type="submit"
+                disabled={isPending}
+                className="btn-primary w-full"
+              >
                 {isPending ? "Saving..." : "Set Country Rate"}
               </button>
             </form>
@@ -808,13 +1403,30 @@ export default function AdminPanelClient({ initialData }: { initialData: AdminDa
             {data.countryRates.length > 0 && (
               <div className="mt-4 space-y-2">
                 {data.countryRates.map((c) => (
-                  <div key={c.id} className="flex items-center justify-between rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm">
-                    <span className="text-white">{c.countryName}</span>
+                  <div
+                    key={c.id}
+                    className="flex items-center justify-between rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm"
+                  >
+                    <span className="text-white">
+                      {c.countryName}
+                    </span>
+
                     <div className="flex items-center gap-3">
                       <span className="text-galaxy-accent2">
-                        {c.countryCode === "LK" ? "Rs. " : "$"}{c.rate.toFixed(2)}
+                        {c.countryCode === "LK"
+                          ? "Rs. "
+                          : "$"}
+                        {c.rate.toFixed(2)}
                       </span>
-                      <button onClick={() => handleDeleteCountryRate(c.countryCode)} className="text-xs text-rose-400 hover:underline">
+
+                      <button
+                        onClick={() =>
+                          handleDeleteCountryRate(
+                            c.countryCode
+                          )
+                        }
+                        className="text-xs text-rose-400 hover:underline"
+                      >
                         Remove
                       </button>
                     </div>
@@ -825,24 +1437,45 @@ export default function AdminPanelClient({ initialData }: { initialData: AdminDa
           </section>
 
           <section className="glass-panel p-6 lg:col-span-2">
-            <h2 className="mb-1 text-lg font-semibold text-white">Your Payment Receiving Details</h2>
-            <p className="mb-4 text-xs text-slate-400">Shown only to approved Buyers.</p>
-            <form action={handleAdminPaymentDetailsUpdate} className="max-w-md space-y-4">
+            <h2 className="mb-1 text-lg font-semibold text-white">
+              Your Payment Receiving Details
+            </h2>
+
+            <p className="mb-4 text-xs text-slate-400">
+              Shown only to approved Buyers.
+            </p>
+
+            <form
+              action={handleAdminPaymentDetailsUpdate}
+              className="max-w-md space-y-4"
+            >
               <textarea
                 name="paymentDetails"
                 required
                 rows={5}
-                defaultValue={data.admin?.paymentDetails ?? ""}
+                defaultValue={
+                  data.admin?.paymentDetails ?? ""
+                }
                 className="glass-input resize-none"
-                placeholder={"Bank: Commercial Bank\nAcc No: 987654321\nName: Galaxy Workers\n\nOR\n\nBinance ID: 987654321"}
+                placeholder={
+                  "Bank: Commercial Bank\nAcc No: 987654321\nName: Galaxy Workers\n\nOR\n\nBinance ID: 987654321"
+                }
               />
+
               {paymentDetailsMessage && (
                 <div className="rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">
                   {paymentDetailsMessage}
                 </div>
               )}
-              <button type="submit" disabled={isPending} className="btn-primary w-full">
-                {isPending ? "Saving..." : "Save Payment Details"}
+
+              <button
+                type="submit"
+                disabled={isPending}
+                className="btn-primary w-full"
+              >
+                {isPending
+                  ? "Saving..."
+                  : "Save Payment Details"}
               </button>
             </form>
           </section>
@@ -852,18 +1485,40 @@ export default function AdminPanelClient({ initialData }: { initialData: AdminDa
       {rejectingPaymentId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-6">
           <div className="glass-panel w-full max-w-md p-6">
-            <h3 className="mb-3 text-lg font-semibold text-white">Reject Payment Request</h3>
+            <h3 className="mb-3 text-lg font-semibold text-white">
+              Reject Payment Request
+            </h3>
+
             <textarea
               value={rejectReason}
-              onChange={(e) => setRejectReason(e.target.value)}
+              onChange={(e) =>
+                setRejectReason(e.target.value)
+              }
               rows={4}
               className="glass-input resize-none"
               placeholder="e.g. Proof slip does not match the amount stated."
             />
+
             <div className="mt-4 flex gap-3">
-              <button onClick={() => setRejectingPaymentId(null)} className="btn-secondary flex-1">Cancel</button>
-              <button onClick={submitRejectPayment} disabled={isPending || !rejectReason.trim()} className="btn-primary flex-1">
-                {isPending ? "Rejecting..." : "Confirm Reject"}
+              <button
+                onClick={() =>
+                  setRejectingPaymentId(null)
+                }
+                className="btn-secondary flex-1"
+              >
+                Cancel
+              </button>
+
+              <button
+                onClick={submitRejectPayment}
+                disabled={
+                  isPending || !rejectReason.trim()
+                }
+                className="btn-primary flex-1"
+              >
+                {isPending
+                  ? "Rejecting..."
+                  : "Confirm Reject"}
               </button>
             </div>
           </div>
@@ -873,12 +1528,23 @@ export default function AdminPanelClient({ initialData }: { initialData: AdminDa
       {deletingUser && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-6">
           <div className="glass-panel w-full max-w-sm p-6 text-center">
-            <h3 className="mb-2 text-lg font-semibold text-white">Delete {deletingUser.name}?</h3>
+            <h3 className="mb-2 text-lg font-semibold text-white">
+              Delete {deletingUser.name}?
+            </h3>
+
             <p className="mb-4 text-sm text-slate-400">
-              This will permanently delete this account and all related data. This cannot be undone.
+              This will permanently delete this account and
+              all related data. This cannot be undone.
             </p>
+
             <div className="flex gap-3">
-              <button onClick={() => setDeletingUser(null)} className="btn-secondary flex-1">Cancel</button>
+              <button
+                onClick={() => setDeletingUser(null)}
+                className="btn-secondary flex-1"
+              >
+                Cancel
+              </button>
+
               <button
                 onClick={confirmDeleteUser}
                 disabled={isPending}
@@ -892,4 +1558,4 @@ export default function AdminPanelClient({ initialData }: { initialData: AdminDa
       )}
     </div>
   );
-          }
+}
