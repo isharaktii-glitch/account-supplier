@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { requireRole } from "@/lib/authGuard";
 import { getAdminDashboardData } from "@/app/actions/adminActions";
 import { Role } from "@prisma/client";
@@ -13,12 +14,17 @@ export default async function AdminDashboardPage() {
       <Navbar />
       <div className="px-6 py-10">
         <div className="mx-auto max-w-6xl">
-          <div className="mb-8">
-            <div className="badge-approved mb-2 inline-flex">Super Admin</div>
-            <h1 className="text-3xl font-bold text-white">Control Panel</h1>
-            <p className="mt-1 text-sm text-slate-400">
-              Manage buyers, workers, rates, announcements, and payment approvals.
-            </p>
+          <div className="mb-8 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="badge-approved mb-2 inline-flex">Super Admin</div>
+              <h1 className="text-3xl font-bold text-white">Control Panel</h1>
+              <p className="mt-1 text-sm text-slate-400">
+                Manage buyers, workers, rates, announcements, and payment approvals.
+              </p>
+            </div>
+            <Link href="/dashboard/admin/accounts" className="btn-primary !px-4 !py-2 text-sm">
+              Email Accounts & Type Rates →
+            </Link>
           </div>
 
           <AdminPanelClient initialData={JSON.parse(JSON.stringify(data))} />
