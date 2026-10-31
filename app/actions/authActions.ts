@@ -4,7 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { createSession, destroySession } from "@/lib/session";
 import { isValidEmail, isStrongEnough, sanitizeString } from "@/lib/validation";
 import { generateReferralCode, computeNewWorkerDisplayId } from "@/lib/referral";
-import { Role } from "@prisma/client";
+import { isAccountType } from "@/lib/accountTypes";
+import { Role, AccountType } from "@prisma/client";
 import bcrypt from "bcryptjs";
 
 export type AuthResult = {
@@ -71,6 +72,8 @@ export async function registerBuyer(formData: FormData): Promise<AuthResult> {
   const email = sanitizeString(String(formData.get("email") || "")).toLowerCase();
   const password = String(formData.get("password") || "");
   const country = sanitizeString(String(formData.get("country") || ""), 50);
+  const buyerTypeRaw = String(formData.get("buyerType") || "GMAIL");
+  const buyerType = isAccountType(buyerTypeRaw) ? buyerTypeRaw : "GMAIL";
 
   if (!name || !isValidEmail(email) || !isStrongEnough(password)) {
     return {
@@ -92,6 +95,7 @@ export async function registerBuyer(formData: FormData): Promise<AuthResult> {
       email,
       password: hashedPassword,
       role: Role.BUYER,
+      buyerType: buyerType as AccountType,
       country: country || null,
       isApproved: false
     }
