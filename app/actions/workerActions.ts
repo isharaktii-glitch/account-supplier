@@ -2,9 +2,10 @@
 
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
-import { Role, NotificationType } from "@prisma/client";
+import { Role, NotificationType, AccountType } from "@prisma/client";
 import { sanitizeString, isValidEmail } from "@/lib/validation";
-import { getRateForCountry, formatRate } from "@/lib/rates";
+import { getRateForCountry, getAllTypeRates, formatRate } from "@/lib/rates";
+import { isAccountType, emailMatchesType, ACCOUNT_TYPE_LABELS } from "@/lib/accountTypes";
 import { revalidatePath } from "next/cache";
 
 async function requireWorker() {
@@ -23,23 +24,45 @@ export async function submitGmailAccount(formData: FormData) {
     return { success: false, message: "The system is currently paused by the admin. Please try again later." };
   }
 
-  const gmail = sanitizeString(String(formData.get("gmail") || "")).toLowerCase();
+  const typeRaw = String(formData.get("type") || "GMAIL");
+  if (!isAccountType(typeRaw)) {
+    return { success: false, message: "Invalid account type." };
+  }
+  const type = typeRaw;
+  const label = ACCOUNT_TYPE_LABELS[type];
+
+  const email = sanitizeString(String(formData.get("gmail") || "")).toLowerCase();
   const accountPassword = String(formData.get("accountPassword") || "");
 
-  if (!isValidEmail(gmail) || !accountPassword || accountPassword.length < 4) {
-    return { success: false, message: "Please provide a valid Gmail address and its password." };
+  if (!isValidEmail(email) || !accountPassword || accountPassword.length < 4) {
+    return { success: false, message: `Please provide a valid ${label} address and its password.` };
   }
 
-  const duplicate = await prisma.accountItem.findFirst({ where: { gmail } });
+  if (!emailMatchesType(email, type)) {
+    return { success: false, message: `This address does not look like a ${label} account.` };
+  }
+
+  const duplicate = await prisma.accountItem.findFirst({ where: { gmail: email } });
   if (duplicate) {
-    return { success: false, message: "This Gmail account has already been submitted before." };
+    return { success: false, message: "This account has already been submitted before." };
   }
 
-  const rateInfo = await getRateForCountry(worker.country);
+  const registeredUser = await prisma.user.findUnique({ where: { email } });
+  if (registeredUser) {
+    return { success: false, message: "This email is a registered member account and cannot be submitted." };
+  }
+
+  const rateInfo = await getRateForCountry(worker.country, type);
 
   await prisma.$transaction([
     prisma.accountItem.create({
-      data: { gmail, password: accountPassword, workerId: worker.id, rateAtEntry: rateInfo.amount }
+      data: {
+        gmail: email,
+        password: accountPassword,
+        type: type as AccountType,
+        workerId: worker.id,
+        rateAtEntry: rateInfo.amount
+      }
     }),
     prisma.user.update({
       where: { id: worker.id },
@@ -49,7 +72,10 @@ export async function submitGmailAccount(formData: FormData) {
 
   revalidatePath("/dashboard/worker");
 
-  return { success: true, message: `Account submitted! ${formatRate(rateInfo)} added to your pending balance.` };
+  return {
+    success: true,
+    message: `${label} account submitted! ${formatRate(rateInfo)} added to your pending balance.`
+  };
 }
 
 export async function updateWorkerPaymentDetails(formData: FormData) {
@@ -102,7 +128,7 @@ export async function requestPayout(formData: FormData) {
         userId: admin.id,
         type: NotificationType.PAYOUT_REQUESTED,
         title: "New Payout Request",
-        message: `${freshWorker.displayId ?? freshWorker.name} requested a payout of $${amount.toFixed(2)}.`
+        message: `${freshWorker.displayId ?? freshWorker.name} requested a payout of ${amount.toFixed(2)}.`
       }
     });
   }
@@ -140,13 +166,15 @@ export async function getWorkerDashboardData() {
       prisma.payoutRequest.findMany({ where: { workerId: worker.id }, orderBy: { createdAt: "desc" } })
     ]);
 
-  const rateInfo = await getRateForCountry(worker.country);
+  const rateInfo = await getRateForCountry(worker.country, "GMAIL");
+  const typeRates = await getAllTypeRates(worker.country);
   const unreadCount = notifications.filter((n) => !n.isRead).length;
 
   return {
     worker: freshWorker,
     submissions,
     rateInfo,
+    typeRates,
     notifications,
     unreadCount,
     referrals,
