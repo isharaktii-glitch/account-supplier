@@ -2,7 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
-import { Role, AccountStatus, NotificationType } from "@prisma/client";
+import { Role, AccountStatus, AccountType, NotificationType } from "@prisma/client";
 import { sanitizeString } from "@/lib/validation";
 import { revalidatePath } from "next/cache";
 import { writeFile, mkdir } from "fs/promises";
@@ -17,43 +17,70 @@ async function requireApprovedBuyer() {
 }
 
 export async function getAvailableAccounts() {
-  await requireApprovedBuyer();
+  const buyer = await requireApprovedBuyer();
+  const buyerType = buyer.buyerType ?? AccountType.GMAIL;
+
+  const users = await prisma.user.findMany({ select: { email: true } });
+  const registeredEmails = users.map((u) => u.email.toLowerCase());
 
   return prisma.accountItem.findMany({
-    where: { status: AccountStatus.AVAILABLE },
+    where: {
+      status: AccountStatus.AVAILABLE,
+      type: buyerType,
+      gmail: { notIn: registeredEmails }
+    },
     orderBy: { createdAt: "desc" }
   });
 }
 
 export async function markAccountDone(accountId: string) {
-  await requireApprovedBuyer();
+  const buyer = await requireApprovedBuyer();
+  const buyerType = buyer.buyerType ?? AccountType.GMAIL;
 
-  const account = await prisma.accountItem.findUnique({ where: { id: accountId } });
+  const account = await prisma.accountItem.findUnique({
+    where: { id: accountId },
+    include: { worker: { select: { role: true } } }
+  });
   if (!account) {
     return { success: false, message: "Account not found." };
   }
+  if (account.type !== buyerType) {
+    return { success: false, message: "This account is not in your category." };
+  }
+  if (account.status !== AccountStatus.AVAILABLE) {
+    return { success: false, message: "This account was already processed." };
+  }
 
-  await prisma.$transaction([
-    prisma.accountItem.update({
+  if (account.worker.role === Role.ADMIN) {
+    await prisma.accountItem.update({
       where: { id: accountId },
       data: { status: AccountStatus.SOLD }
-    }),
-    prisma.user.update({
-      where: { id: account.workerId },
-      data: {
-        pendingBalance: { decrement: account.rateAtEntry },
-        balance: { increment: account.rateAtEntry }
-      }
-    }),
-    prisma.notification.create({
-      data: {
-        userId: account.workerId,
-        type: NotificationType.ACCOUNT_SOLD,
-        title: "Account Confirmed",
-        message: `Your submitted account (${account.gmail}) was confirmed working. Rs. ${account.rateAtEntry.toFixed(2)} added to your balance.`
-      }
-    })
-  ]);
+    });
+  } else {
+    await prisma.$transaction([
+      prisma.accountItem.update({
+        where: { id: accountId },
+        data: { status: AccountStatus.SOLD }
+      }),
+      prisma.user.update({
+        where: { id: account.workerId },
+        data: {
+          pendingBalance: { decrement: account.rateAtEntry },
+          balance: { increment: account.rateAtEntry }
+        }
+      }),
+      prisma.notification.create({
+        data: {
+          userId: account.workerId,
+          type: NotificationType.ACCOUNT_SOLD,
+          title: "Account Confirmed",
+          message: `Your submitted account (${account.gmail}) was confirmed working. ${account.rateAtEntry.toFixed(
+            2
+          )} added to your confirmed balance.`
+        }
+      })
+    ]);
+  }
 
   revalidatePath("/dashboard/buyer");
   revalidatePath("/dashboard/worker");
@@ -63,36 +90,53 @@ export async function markAccountDone(accountId: string) {
 }
 
 export async function markAccountRejected(accountId: string, formData: FormData) {
-  await requireApprovedBuyer();
+  const buyer = await requireApprovedBuyer();
+  const buyerType = buyer.buyerType ?? AccountType.GMAIL;
 
   const reason = sanitizeString(String(formData.get("reason") || ""), 500);
   if (!reason) {
     return { success: false, message: "Please provide a rejection reason." };
   }
 
-  const account = await prisma.accountItem.findUnique({ where: { id: accountId } });
+  const account = await prisma.accountItem.findUnique({
+    where: { id: accountId },
+    include: { worker: { select: { role: true } } }
+  });
   if (!account) {
     return { success: false, message: "Account not found." };
   }
+  if (account.type !== buyerType) {
+    return { success: false, message: "This account is not in your category." };
+  }
+  if (account.status !== AccountStatus.AVAILABLE) {
+    return { success: false, message: "This account was already processed." };
+  }
 
-  await prisma.$transaction([
-    prisma.accountItem.update({
+  if (account.worker.role === Role.ADMIN) {
+    await prisma.accountItem.update({
       where: { id: accountId },
       data: { status: AccountStatus.REJECTED, rejectionReason: reason }
-    }),
-    prisma.user.update({
-      where: { id: account.workerId },
-      data: { pendingBalance: { decrement: account.rateAtEntry } }
-    }),
-    prisma.notification.create({
-      data: {
-        userId: account.workerId,
-        type: NotificationType.ACCOUNT_REJECTED,
-        title: "Account Rejected",
-        message: `Your submitted account (${account.gmail}) was rejected. Reason: ${reason}`
-      }
-    })
-  ]);
+    });
+  } else {
+    await prisma.$transaction([
+      prisma.accountItem.update({
+        where: { id: accountId },
+        data: { status: AccountStatus.REJECTED, rejectionReason: reason }
+      }),
+      prisma.user.update({
+        where: { id: account.workerId },
+        data: { pendingBalance: { decrement: account.rateAtEntry } }
+      }),
+      prisma.notification.create({
+        data: {
+          userId: account.workerId,
+          type: NotificationType.ACCOUNT_REJECTED,
+          title: "Account Rejected",
+          message: `Your submitted account (${account.gmail}) was rejected. Reason: ${reason}`
+        }
+      })
+    ]);
+  }
 
   revalidatePath("/dashboard/buyer");
   revalidatePath("/dashboard/worker");
