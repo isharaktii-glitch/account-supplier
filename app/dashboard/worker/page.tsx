@@ -53,6 +53,7 @@ export default async function WorkerDashboardPage({
             initialWorker={JSON.parse(JSON.stringify(data.worker))}
             initialSubmissions={JSON.parse(JSON.stringify(data.submissions))}
             rateInfo={data.rateInfo}
+            typeRates={data.typeRates}
             initialNotifications={JSON.parse(JSON.stringify(data.notifications))}
             initialUnreadCount={data.unreadCount}
             referrals={JSON.parse(JSON.stringify(data.referrals))}
