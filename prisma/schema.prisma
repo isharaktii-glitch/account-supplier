@@ -13,6 +13,13 @@ enum Role {
   BUYER
 }
 
+enum AccountType {
+  GMAIL
+  HOTMAIL
+  AOL
+  OTHER
+}
+
 enum AccountStatus {
   AVAILABLE
   SOLD
@@ -47,6 +54,7 @@ model User {
   role        Role
 
   country     String?
+  buyerType   AccountType?
 
   workerCode  String?  @unique
   displayId   String?  @unique
@@ -80,6 +88,7 @@ model AccountItem {
   id             String        @id @default(cuid())
   gmail          String
   password       String
+  type           AccountType   @default(GMAIL)
   status         AccountStatus @default(AVAILABLE)
   rateAtEntry    Float         @default(0)
   rejectionReason String?      @db.Text
@@ -91,6 +100,7 @@ model AccountItem {
 
   @@index([workerId])
   @@index([status])
+  @@index([type])
 }
 
 model PaymentRequest {
@@ -172,6 +182,9 @@ model SystemSettings {
   sriLankaRate        Float  @default(50)
   exchangeRate        Float  @default(300)
   otherCountriesRate  Float  @default(30)
+  hotmailRate         Float  @default(50)
+  aolRate             Float  @default(50)
+  otherEmailRate      Float  @default(50)
   referralCommission  Float  @default(10)
   directJoinCounter   Int    @default(0)
   isSystemPaused      Boolean @default(false)
