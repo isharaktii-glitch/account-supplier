@@ -4,6 +4,7 @@ import { useState, useTransition, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { registerWorker, registerBuyer } from "@/app/actions/authActions";
 import CountrySelect from "@/components/CountrySelect";
+import { ACCOUNT_TYPES, ACCOUNT_TYPE_LABELS } from "@/lib/accountTypes";
 import Link from "next/link";
 
 type Tab = "worker" | "buyer";
@@ -91,6 +92,22 @@ export default function RegisterPage() {
             <label className="mb-1.5 block text-sm font-medium text-slate-300">Country</label>
             <CountrySelect name="country" required />
           </div>
+
+          {tab === "buyer" && (
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-slate-300">
+                Account Type You Want to Buy
+              </label>
+              <select name="buyerType" defaultValue="GMAIL" className="glass-input">
+                {ACCOUNT_TYPES.map((t) => (
+                  <option key={t} value={t}>{ACCOUNT_TYPE_LABELS[t]}</option>
+                ))}
+              </select>
+              <p className="mt-1 text-[11px] text-slate-500">
+                You will only see accounts of this type. To buy another type, register again with a different email.
+              </p>
+            </div>
+          )}
 
           <div>
             <label className="mb-1.5 block text-sm font-medium text-slate-300">Password</label>
