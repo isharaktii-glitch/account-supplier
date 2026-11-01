@@ -51,6 +51,7 @@ type NotificationItem = {
 type Referral = { id: string; name: string; displayId: string | null; createdAt: string };
 type PayoutProof = { id: string; amount: number; proofUrl: string; note: string | null; createdAt: string };
 type PayoutRequestItem = { id: string; amount: number; status: string; createdAt: string };
+type CommissionStats = { confirmed: number; pending: number };
 
 type WorkerPanelClientProps = {
   initialWorker: Worker;
@@ -61,6 +62,7 @@ type WorkerPanelClientProps = {
   initialUnreadCount: number;
   referrals: Referral[];
   referralCommission: number;
+  commissionStats: CommissionStats;
   payoutProofs: PayoutProof[];
   payoutRequests: PayoutRequestItem[];
   isSystemPaused: boolean;
@@ -75,6 +77,7 @@ export default function WorkerPanelClient({
   initialUnreadCount,
   referrals,
   referralCommission,
+  commissionStats,
   payoutProofs,
   payoutRequests,
   isSystemPaused
@@ -434,11 +437,12 @@ export default function WorkerPanelClient({
 
       {activeTab === "referrals" && (
         <div className="grid gap-6 lg:grid-cols-3">
-          <div className="lg:col-span-1">
+          <div className="space-y-6 lg:col-span-1">
             <div className="glass-panel p-6">
               <h2 className="mb-1 text-lg font-semibold text-white">Your Referral Link</h2>
               <p className="mb-4 text-xs text-slate-400">
-                Share this link. When someone registers as a Worker through it, they become your referral.
+                Share this link. When someone registers as a Worker through it, they become your referral
+                and you earn {referralCommission}% commission on every account they submit.
               </p>
               <div className="mb-3 break-all rounded-lg border border-white/10 bg-white/5 p-3 font-mono text-xs text-galaxy-accent2">
                 {referralLink || "Loading..."}
@@ -446,6 +450,27 @@ export default function WorkerPanelClient({
               <button onClick={copyReferralLink} className="btn-primary w-full">
                 {copied ? "Copied!" : "Copy Link"}
               </button>
+            </div>
+
+            <div className="glass-panel p-6">
+              <h2 className="mb-3 text-lg font-semibold text-white">Referral Commission</h2>
+              <div className="grid grid-cols-2 gap-3 text-center">
+                <div className="rounded-lg border border-white/10 bg-white/5 p-3">
+                  <p className="text-lg font-bold text-emerald-400">
+                    {symbol}{commissionStats.confirmed.toFixed(2)}
+                  </p>
+                  <p className="text-[11px] text-slate-400">Confirmed</p>
+                </div>
+                <div className="rounded-lg border border-white/10 bg-white/5 p-3">
+                  <p className="text-lg font-bold text-amber-400">
+                    {symbol}{commissionStats.pending.toFixed(2)}
+                  </p>
+                  <p className="text-[11px] text-slate-400">Pending</p>
+                </div>
+              </div>
+              <p className="mt-3 text-[11px] text-slate-500">
+                Commission becomes confirmed when the buyer marks your referral&apos;s account as done.
+              </p>
             </div>
           </div>
 
