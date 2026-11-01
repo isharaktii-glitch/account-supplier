@@ -93,6 +93,9 @@ model AccountItem {
   rateAtEntry    Float         @default(0)
   rejectionReason String?      @db.Text
 
+  commissionAmount     Float   @default(0)
+  commissionReferrerId String?
+
   worker      User          @relation("WorkerAccounts", fields: [workerId], references: [id])
   workerId    String
 
