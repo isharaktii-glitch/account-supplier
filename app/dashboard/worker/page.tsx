@@ -58,6 +58,7 @@ export default async function WorkerDashboardPage({
             initialUnreadCount={data.unreadCount}
             referrals={JSON.parse(JSON.stringify(data.referrals))}
             referralCommission={data.referralCommission}
+            commissionStats={data.commissionStats}
             payoutProofs={JSON.parse(JSON.stringify(data.payoutProofs))}
             payoutRequests={JSON.parse(JSON.stringify(data.payoutRequests))}
             isSystemPaused={data.isSystemPaused}
