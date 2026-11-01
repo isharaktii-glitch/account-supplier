@@ -39,7 +39,7 @@ export async function markAccountDone(accountId: string) {
 
   const account = await prisma.accountItem.findUnique({
     where: { id: accountId },
-    include: { worker: { select: { role: true } } }
+    include: { worker: { select: { role: true, displayId: true } } }
   });
   if (!account) {
     return { success: false, message: "Account not found." };
@@ -57,19 +57,26 @@ export async function markAccountDone(accountId: string) {
       data: { status: AccountStatus.SOLD }
     });
   } else {
-    await prisma.$transaction([
-      prisma.accountItem.update({
+    const referrer =
+      account.commissionReferrerId && account.commissionAmount > 0
+        ? await prisma.user.findUnique({ where: { id: account.commissionReferrerId } })
+        : null;
+
+    await prisma.$transaction(async (tx) => {
+      await tx.accountItem.update({
         where: { id: accountId },
         data: { status: AccountStatus.SOLD }
-      }),
-      prisma.user.update({
+      });
+
+      await tx.user.update({
         where: { id: account.workerId },
         data: {
           pendingBalance: { decrement: account.rateAtEntry },
           balance: { increment: account.rateAtEntry }
         }
-      }),
-      prisma.notification.create({
+      });
+
+      await tx.notification.create({
         data: {
           userId: account.workerId,
           type: NotificationType.ACCOUNT_SOLD,
@@ -78,8 +85,31 @@ export async function markAccountDone(accountId: string) {
             2
           )} added to your confirmed balance.`
         }
-      })
-    ]);
+      });
+
+      if (referrer) {
+        const symbol = referrer.country === "LK" ? "Rs." : "$";
+
+        await tx.user.update({
+          where: { id: referrer.id },
+          data: {
+            pendingBalance: { decrement: account.commissionAmount },
+            balance: { increment: account.commissionAmount }
+          }
+        });
+
+        await tx.notification.create({
+          data: {
+            userId: referrer.id,
+            type: NotificationType.ACCOUNT_SOLD,
+            title: "Referral Commission Earned",
+            message: `${account.worker.displayId ?? "Your referral"}'s account was confirmed. Commission ${symbol}${account.commissionAmount.toFixed(
+              2
+            )} added to your confirmed balance.`
+          }
+        });
+      }
+    });
   }
 
   revalidatePath("/dashboard/buyer");
@@ -118,24 +148,38 @@ export async function markAccountRejected(accountId: string, formData: FormData)
       data: { status: AccountStatus.REJECTED, rejectionReason: reason }
     });
   } else {
-    await prisma.$transaction([
-      prisma.accountItem.update({
+    const referrer =
+      account.commissionReferrerId && account.commissionAmount > 0
+        ? await prisma.user.findUnique({ where: { id: account.commissionReferrerId } })
+        : null;
+
+    await prisma.$transaction(async (tx) => {
+      await tx.accountItem.update({
         where: { id: accountId },
         data: { status: AccountStatus.REJECTED, rejectionReason: reason }
-      }),
-      prisma.user.update({
+      });
+
+      await tx.user.update({
         where: { id: account.workerId },
         data: { pendingBalance: { decrement: account.rateAtEntry } }
-      }),
-      prisma.notification.create({
+      });
+
+      await tx.notification.create({
         data: {
           userId: account.workerId,
           type: NotificationType.ACCOUNT_REJECTED,
           title: "Account Rejected",
           message: `Your submitted account (${account.gmail}) was rejected. Reason: ${reason}`
         }
-      })
-    ]);
+      });
+
+      if (referrer) {
+        await tx.user.update({
+          where: { id: referrer.id },
+          data: { pendingBalance: { decrement: account.commissionAmount } }
+        });
+      }
+    });
   }
 
   revalidatePath("/dashboard/buyer");
