@@ -6,6 +6,7 @@ import { Role, NotificationType, AccountType } from "@prisma/client";
 import { sanitizeString, isValidEmail } from "@/lib/validation";
 import { getRateForCountry, getAllTypeRates, formatRate } from "@/lib/rates";
 import { isAccountType, emailMatchesType, ACCOUNT_TYPE_LABELS } from "@/lib/accountTypes";
+import { calcReferralCommission } from "@/lib/commission";
 import { revalidatePath } from "next/cache";
 
 async function requireWorker() {
@@ -54,21 +55,50 @@ export async function submitGmailAccount(formData: FormData) {
 
   const rateInfo = await getRateForCountry(worker.country, type);
 
-  await prisma.$transaction([
-    prisma.accountItem.create({
+  let commission = 0;
+  let commissionReferrerId: string | null = null;
+
+  if (worker.referredById) {
+    const referrer = await prisma.user.findUnique({ where: { id: worker.referredById } });
+    if (referrer && referrer.role === Role.WORKER) {
+      commission = calcReferralCommission({
+        rateAmount: rateInfo.amount,
+        workerCountry: worker.country,
+        referrerCountry: referrer.country,
+        commissionPercent: settings?.referralCommission ?? 10,
+        exchangeRate: settings?.exchangeRate ?? 300
+      });
+      if (commission > 0) {
+        commissionReferrerId = referrer.id;
+      }
+    }
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.accountItem.create({
       data: {
         gmail: email,
         password: accountPassword,
         type: type as AccountType,
         workerId: worker.id,
-        rateAtEntry: rateInfo.amount
+        rateAtEntry: rateInfo.amount,
+        commissionAmount: commissionReferrerId ? commission : 0,
+        commissionReferrerId
       }
-    }),
-    prisma.user.update({
+    });
+
+    await tx.user.update({
       where: { id: worker.id },
       data: { pendingBalance: { increment: rateInfo.amount } }
-    })
-  ]);
+    });
+
+    if (commissionReferrerId) {
+      await tx.user.update({
+        where: { id: commissionReferrerId },
+        data: { pendingBalance: { increment: commission } }
+      });
+    }
+  });
 
   revalidatePath("/dashboard/worker");
 
@@ -152,23 +182,41 @@ export async function markAllNotificationsAsRead() {
 export async function getWorkerDashboardData() {
   const worker = await requireWorker();
 
-  const [freshWorker, submissions, settings, notifications, referrals, payoutProofs, payoutRequests] =
-    await Promise.all([
-      prisma.user.findUnique({ where: { id: worker.id } }),
-      prisma.accountItem.findMany({ where: { workerId: worker.id }, orderBy: { createdAt: "desc" } }),
-      prisma.systemSettings.findUnique({ where: { id: "global" } }),
-      prisma.notification.findMany({ where: { userId: worker.id }, orderBy: { createdAt: "desc" }, take: 30 }),
-      prisma.user.findMany({
-        where: { referredById: worker.id },
-        select: { id: true, name: true, displayId: true, createdAt: true }
-      }),
-      prisma.payoutProof.findMany({ where: { workerId: worker.id }, orderBy: { createdAt: "desc" } }),
-      prisma.payoutRequest.findMany({ where: { workerId: worker.id }, orderBy: { createdAt: "desc" } })
-    ]);
+  const [
+    freshWorker,
+    submissions,
+    settings,
+    notifications,
+    referrals,
+    payoutProofs,
+    payoutRequests,
+    commissionGroups
+  ] = await Promise.all([
+    prisma.user.findUnique({ where: { id: worker.id } }),
+    prisma.accountItem.findMany({ where: { workerId: worker.id }, orderBy: { createdAt: "desc" } }),
+    prisma.systemSettings.findUnique({ where: { id: "global" } }),
+    prisma.notification.findMany({ where: { userId: worker.id }, orderBy: { createdAt: "desc" }, take: 30 }),
+    prisma.user.findMany({
+      where: { referredById: worker.id },
+      select: { id: true, name: true, displayId: true, createdAt: true }
+    }),
+    prisma.payoutProof.findMany({ where: { workerId: worker.id }, orderBy: { createdAt: "desc" } }),
+    prisma.payoutRequest.findMany({ where: { workerId: worker.id }, orderBy: { createdAt: "desc" } }),
+    prisma.accountItem.groupBy({
+      by: ["status"],
+      where: { commissionReferrerId: worker.id, commissionAmount: { gt: 0 } },
+      _sum: { commissionAmount: true }
+    })
+  ]);
 
   const rateInfo = await getRateForCountry(worker.country, "GMAIL");
   const typeRates = await getAllTypeRates(worker.country);
   const unreadCount = notifications.filter((n) => !n.isRead).length;
+
+  const commissionStats = {
+    confirmed: commissionGroups.find((g) => g.status === "SOLD")?._sum.commissionAmount ?? 0,
+    pending: commissionGroups.find((g) => g.status === "AVAILABLE")?._sum.commissionAmount ?? 0
+  };
 
   return {
     worker: freshWorker,
@@ -181,6 +229,7 @@ export async function getWorkerDashboardData() {
     referralCommission: settings?.referralCommission ?? 10,
     payoutProofs,
     payoutRequests,
+    commissionStats,
     isSystemPaused: settings?.isSystemPaused ?? false
   };
 }
